@@ -1,0 +1,1826 @@
+<!doctype html>
+<html lang="ja">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>スパコンとバグ</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=DotGothic16&family=M+PLUS+Rounded+1c:wght@500;800&display=swap">
+<style>
+  :root {
+    color-scheme: dark;
+    --pcb: #0c3a2a;
+    --pcb-2: #114a36;
+    --panel: #082a1f;
+    --line: #2e6e54;
+    --ink: #f2f5ec;
+    --muted: #a8c6b5;
+    --copper: #c8963e;
+    --gold: #e8b64c;
+    --gold-deep: #9c6f22;
+    --led: #5dff8a;
+    --led-dim: #1d5a36;
+    --lose: #9fb3a8;
+    --super: #2f7fd1;
+    --robot: #e0801a;
+    --bug: #c2338a;
+    --card: #f7f8f3;
+    --card-ink: #1f2a26;
+    --display: "DotGothic16", "MS Gothic", "Osaka-Mono", monospace;
+    --body: "M PLUS Rounded 1c", "Hiragino Maru Gothic ProN", "Yu Gothic", "Meiryo", sans-serif;
+  }
+  html, body { min-height: 100%; }
+  body {
+    margin: 0;
+    padding-inline: 16px;
+    padding-block: 20px 32px;
+    background:
+      url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cg fill='none' stroke='%23c8963e' stroke-opacity='.2' stroke-width='2'%3E%3Cpath d='M0 30 H50 L70 50 H160'/%3E%3Cpath d='M30 160 V110 L50 90 H90'/%3E%3Cpath d='M120 0 V40 L100 60'/%3E%3Cpath d='M160 120 H130 L110 140 V160'/%3E%3C/g%3E%3Cg fill='%23e8b64c' fill-opacity='.28'%3E%3Ccircle cx='70' cy='50' r='4'/%3E%3Ccircle cx='90' cy='90' r='4'/%3E%3Ccircle cx='100' cy='60' r='4'/%3E%3Ccircle cx='110' cy='140' r='4'/%3E%3C/g%3E%3C/svg%3E"),
+      radial-gradient(1200px 520px at 50% -10%, #1a5e44 0%, transparent 60%),
+      var(--pcb);
+    color: var(--ink);
+    font-family: var(--body);
+    font-weight: 500;
+    font-size: 17px;
+    line-height: 1.6;
+  }
+  .wrap { max-width: 1120px; margin: 0 auto; display: grid; gap: 18px; }
+  h1, h2, h3 { font-family: var(--display); font-weight: 400; margin: 0; text-wrap: balance; letter-spacing: .04em; }
+  button { font-family: var(--body); }
+  .btn {
+    font-weight: 800; font-size: 20px; color: var(--card-ink);
+    background: var(--gold); border: 0; border-radius: 10px;
+    padding: 12px 34px; cursor: pointer;
+    box-shadow: 0 5px 0 var(--gold-deep);
+    transition: transform .1s, box-shadow .1s;
+  }
+  .btn:hover { transform: translateY(-2px); box-shadow: 0 7px 0 var(--gold-deep); }
+  .btn:active { transform: translateY(3px); box-shadow: 0 2px 0 var(--gold-deep); }
+  .btn.ghost { background: transparent; color: var(--ink); box-shadow: inset 0 0 0 2px var(--line); }
+  .btn.small { font-size: 15px; padding: 8px 16px; }
+  button:focus-visible { outline: 4px solid #fff; outline-offset: 3px; }
+  .silk { font-family: var(--display); font-size: 12px; letter-spacing: .14em; color: var(--muted); opacity: .75; }
+
+  /* ---------- LED ---------- */
+  .led { display: inline-block; width: 10px; height: 10px; border-radius: 50%; background: var(--led-dim); flex: none; }
+  .led.on { background: var(--led); box-shadow: 0 0 8px 2px #5dff8a99; animation: blink 1s steps(2, jump-none) infinite; }
+  @keyframes blink { 50% { background: var(--led-dim); box-shadow: none; } }
+
+  /* ---------- cards (ICチップ風) ---------- */
+  .card {
+    --cw: 120px;
+    --c: var(--line);
+    position: relative;
+    width: var(--cw);
+    aspect-ratio: 5 / 7;
+    box-sizing: border-box;
+    border-radius: calc(var(--cw) * .07);
+    background: var(--card);
+    color: var(--card-ink);
+    border: calc(var(--cw) * .035) solid var(--c);
+    display: flex; flex-direction: column; align-items: center; justify-content: space-between;
+    padding: calc(var(--cw) * .06);
+    box-shadow: 0 6px 0 rgba(0,0,0,.3);
+    font-family: var(--body);
+    flex: none;
+  }
+  .card.face::before, .card.face::after {
+    content: ""; position: absolute; top: 22%; bottom: 22%;
+    width: calc(var(--cw) * .06);
+    background: repeating-linear-gradient(180deg, var(--gold) 0 calc(var(--cw) * .05), transparent 0 calc(var(--cw) * .1));
+  }
+  .card.face::before { left: calc(var(--cw) * -.1); }
+  .card.face::after { right: calc(var(--cw) * -.1); }
+  .card.super { --c: var(--super); }
+  .card.robot { --c: var(--robot); }
+  .card.bug { --c: var(--bug); }
+  .card .name {
+    font-family: var(--display); font-size: calc(var(--cw) * .15); line-height: 1.35;
+    background: var(--c); color: #fff; width: 100%; text-align: center;
+    border-radius: calc(var(--cw) * .04);
+  }
+  .card svg { width: 84%; height: auto; }
+  .card .rule { font-size: calc(var(--cw) * .095); font-weight: 800; color: var(--c); line-height: 1.2; text-align: center; }
+  .card.back {
+    background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 50 70' preserveAspectRatio='none'%3E%3Crect width='50' height='70' fill='%23114a36'/%3E%3Cg stroke='%23c8963e' stroke-width='1.6' fill='none'%3E%3Cpath d='M0 12 H10 L17 19 V27'/%3E%3Cpath d='M50 16 H40 L33 23 V27'/%3E%3Cpath d='M6 70 V58 L13 51 H16'/%3E%3Cpath d='M44 70 V58 L37 51 H34'/%3E%3Cpath d='M25 0 V26'/%3E%3Cpath d='M25 44 V70'/%3E%3C/g%3E%3Cg fill='%23e8b64c'%3E%3Ccircle cx='10' cy='12' r='2'/%3E%3Ccircle cx='40' cy='16' r='2'/%3E%3Ccircle cx='13' cy='51' r='2'/%3E%3Ccircle cx='37' cy='51' r='2'/%3E%3C/g%3E%3Crect x='14' y='25' width='22' height='20' rx='2' fill='%23181d1b'/%3E%3C/svg%3E") center / 100% 100% no-repeat;
+    border-color: var(--gold);
+    justify-content: center;
+  }
+  .card.back::after {
+    content: "?"; font-family: var(--display); color: var(--gold);
+    font-size: calc(var(--cw) * .24); line-height: 1;
+  }
+  button.card { cursor: pointer; transition: transform .15s ease, box-shadow .15s ease; }
+  @media (hover: hover) { button.card:hover { transform: translateY(-14px); box-shadow: 0 16px 0 rgba(0,0,0,.25), 0 0 0 3px var(--led); } }
+  button.card:active { transform: translateY(-6px); box-shadow: 0 0 0 4px var(--led); }
+  .hand.locked button.card { cursor: default; opacity: .55; }
+  .hand.locked button.card:hover { transform: none; box-shadow: 0 6px 0 rgba(0,0,0,.3); }
+
+  .flip { --cw: clamp(84px, min(14vw, 24vh), 172px); width: var(--cw); aspect-ratio: 5 / 7; perspective: 900px; position: relative; }
+  .flip .inner { position: absolute; inset: 0; transition: transform .6s cubic-bezier(.3,1.4,.5,1); transform-style: preserve-3d; }
+  .flip.open .inner { transform: rotateY(180deg); }
+  .flip .card { --cw: var(--fw, 150px); width: 100%; position: absolute; inset: 0; backface-visibility: hidden; -webkit-backface-visibility: hidden; }
+  .flip .card.face { transform: rotateY(180deg); }
+  .flip.empty { border: 2px dashed var(--line); border-radius: 12px; box-sizing: border-box; display: grid; place-items: center; }
+  .flip.empty::after { content: "EMPTY"; font-family: var(--display); color: var(--line); letter-spacing: .14em; font-size: 13px; }
+  .flip.win .card.face { box-shadow: 0 0 0 5px var(--led), 0 0 40px 8px #5dff8a77; }
+  .flip.win { animation: winPulse .9s ease-in-out 2; }
+  @keyframes winPulse { 50% { transform: scale(1.12); filter: brightness(1.25); } }
+  .flip.lose { animation: loseShake .5s ease-in-out; }
+  @keyframes loseShake { 20% { transform: translateX(-10px) rotate(-6deg); } 40% { transform: translateX(10px) rotate(5deg); } 60% { transform: translateX(-6px) rotate(-3deg); } 80% { transform: translateX(4px); } }
+  .flip.open .inner { transition-duration: .5s; }
+  .flip.tick { animation: tickBump .3s ease-out; }
+  @keyframes tickBump { 40% { transform: scale(1.08); } }
+  .board.duo .slot .flip.win, .board.duo .slot .flip.lose { animation-name: none; }
+  .flip.lose .card.face { filter: grayscale(.7) brightness(.75); }
+  .drop { animation: drop .35s ease-out; }
+  @keyframes drop { from { transform: translateY(40px) scale(.9); opacity: 0; } }
+
+  /* ---------- title ---------- */
+  #title { display: grid; gap: 26px; justify-items: center; text-align: center; padding-block: 12px 8px; }
+  .logo { font-size: clamp(40px, min(8vw, 10vh), 84px); line-height: 1.1; color: var(--ink); text-shadow: 0 4px 0 var(--copper), 0 0 28px #5dff8a44; }
+  .logo small { display: block; font-family: var(--body); font-weight: 800; font-size: clamp(16px, 2vw, 22px); color: var(--muted); text-shadow: none; margin-top: 12px; letter-spacing: .04em; }
+  .title-cards { display: flex; gap: clamp(22px, 3vw, 36px); justify-content: center; flex-wrap: wrap; }
+  .title-cards .card { --cw: clamp(96px, 13vw, 150px); }
+  .title-cards .card:nth-child(1) { transform: rotate(-5deg) translateY(8px); }
+  .title-cards .card:nth-child(3) { transform: rotate(5deg) translateY(8px); }
+
+  .rules { background: var(--panel); border: 2px solid var(--line); border-radius: 16px; padding: 22px clamp(16px, 3vw, 32px); max-width: 780px; text-align: left; display: grid; gap: 16px; }
+  .rules h2 { font-size: 24px; color: var(--gold); }
+  .chain { display: grid; gap: 12px; }
+  .chain-row { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; font-weight: 800; font-size: 18px; }
+  .chain-row .card { --cw: 56px; padding: 4px; }
+  .chain-row .card::before, .chain-row .card::after { display: none; }
+  .chain-row .card .name, .chain-row .card .rule { display: none; }
+  .chain-row .arrow { color: var(--led); font-family: var(--display); }
+  .chain-row .why { font-weight: 500; color: var(--muted); font-size: 15px; }
+  .rules ol { margin: 0; padding-left: 1.4em; display: grid; gap: 6px; }
+  .rules li::marker { color: var(--gold); font-weight: 800; }
+  .pts-note { display: flex; gap: 12px; flex-wrap: wrap; }
+  .pill { border-radius: 999px; padding: 4px 14px; font-weight: 800; font-size: 15px; color: #fff; }
+  .pill.super { background: var(--super); }
+  .pill.bug { background: var(--bug); }
+  .pill.robot { background: var(--robot); }
+
+  /* ---------- mode select ---------- */
+  .modes { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; max-width: 980px; width: 100%; }
+  .mode {
+    background: var(--panel); border: 2px solid var(--line); border-radius: 14px;
+    padding: 16px 20px; color: var(--ink); text-align: left; cursor: pointer;
+    display: grid; gap: 4px; transition: border-color .15s, transform .15s;
+  }
+  .mode:hover { transform: translateY(-2px); }
+  .mode .mt { font-family: var(--display); font-size: 22px; display: flex; align-items: center; gap: 10px; }
+  .mode[aria-pressed="true"] { border-color: var(--led); box-shadow: 0 0 0 4px #5dff8a33; }
+  .mode[aria-pressed="true"] .led { background: var(--led); box-shadow: 0 0 8px 2px #5dff8a99; }
+  .mode .md { color: var(--muted); font-size: 15px; }
+  .names { display: flex; gap: 14px; flex-wrap: wrap; justify-content: center; }
+  .names label { display: grid; gap: 4px; font-weight: 800; text-align: left; font-size: 15px; }
+  .names input {
+    font: inherit; font-size: 18px; padding: 8px 12px; border-radius: 10px;
+    border: 2px solid var(--line); background: var(--panel); color: var(--ink); width: 11em; max-width: 100%;
+  }
+  .names input:focus-visible { outline: 3px solid var(--led); outline-offset: 1px; }
+
+  /* 通信対戦：へやを つくる／ばんごうで さんか */
+  .net { display: grid; gap: 12px; justify-items: center; background: var(--panel); border: 2px solid var(--line); border-radius: 14px; padding: 16px 20px; max-width: 780px; width: 100%; box-sizing: border-box; }
+  .net label { display: grid; gap: 4px; font-weight: 800; font-size: 15px; text-align: left; }
+  .net input {
+    font: inherit; font-size: 18px; padding: 8px 12px; border-radius: 10px;
+    border: 2px solid var(--line); background: #04140e; color: var(--ink); width: 11em; max-width: 100%; box-sizing: border-box;
+  }
+  .net input:focus-visible { outline: 3px solid var(--led); outline-offset: 1px; }
+  .net-row { display: flex; gap: 10px; align-items: center; justify-content: center; flex-wrap: wrap; }
+  .net-or { color: var(--muted); font-weight: 800; font-size: 14px; }
+  #netCode { width: 8.5em; font-family: var(--display); letter-spacing: .12em; text-align: center; }
+  .net-code { display: grid; justify-items: center; gap: 2px; font-weight: 800; color: var(--muted); font-size: 15px; }
+  .net-code b { font-family: var(--display); font-weight: 400; font-size: clamp(44px, 8vw, 64px); line-height: 1.1; color: var(--gold); letter-spacing: .18em; text-shadow: 0 0 16px #e8b64c66; }
+  .twin-status.bad { color: #ff8f86; }
+  .btn:disabled { opacity: .4; cursor: not-allowed; transform: none; box-shadow: 0 5px 0 var(--gold-deep); }
+
+  /* ---------- game ---------- */
+  .topbar { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+  .topbar h1 { font-size: 26px; color: var(--ink); text-shadow: 0 3px 0 var(--copper); }
+  .round-chip { font-family: var(--display); background: #04140e; color: var(--led); border-radius: 8px; padding: 6px 16px; letter-spacing: .06em; text-shadow: 0 0 8px #5dff8a88; }
+  .tools { display: flex; gap: 8px; flex-wrap: wrap; }
+  .scores { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  .score { background: var(--panel); border: 2px solid var(--line); border-radius: 14px; padding: 10px 16px; display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; }
+  .score .who { font-weight: 800; display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+  .score .num {
+    font-family: var(--display); font-size: 34px; line-height: 1; color: var(--led);
+    background: #04140e; border-radius: 8px; padding: 6px 12px; min-width: 2.4em; text-align: right;
+    text-shadow: 0 0 10px #5dff8a99; font-variant-numeric: tabular-nums;
+  }
+  .score .num small { font-size: 15px; margin-left: 4px; }
+
+  .board {
+    position: relative;
+    background:
+      radial-gradient(circle at 18px 18px, #cfd6d2 0 5px, var(--gold) 5px 9px, transparent 9.5px),
+      radial-gradient(circle at calc(100% - 18px) 18px, #cfd6d2 0 5px, var(--gold) 5px 9px, transparent 9.5px),
+      radial-gradient(circle at 18px calc(100% - 18px), #cfd6d2 0 5px, var(--gold) 5px 9px, transparent 9.5px),
+      radial-gradient(circle at calc(100% - 18px) calc(100% - 18px), #cfd6d2 0 5px, var(--gold) 5px 9px, transparent 9.5px),
+      linear-gradient(180deg, var(--pcb-2), var(--panel));
+    border-radius: 18px; padding: clamp(18px, 2.6vw, 30px); display: grid; gap: 18px;
+    box-shadow: inset 0 0 0 2px var(--line), 0 10px 30px #0006;
+  }
+  .board-tag { position: absolute; top: 10px; left: 38px; }
+  .board-tag.r { left: auto; right: 38px; }
+  .area-label { font-weight: 800; color: var(--muted); font-size: 15px; display: flex; gap: 10px; align-items: center; justify-content: center; flex-wrap: wrap; }
+  .hand { display: flex; gap: clamp(18px, 2.2vw, 26px); justify-content: center; flex-wrap: wrap; min-height: 40px; }
+  .hand .card { --cw: clamp(62px, min(10.5vw, 19vh), 132px); }
+  .hand.small { gap: 16px; }
+  .hand.small .card { --cw: clamp(36px, min(5.5vw, 9vh), 64px); box-shadow: 0 3px 0 rgba(0,0,0,.3); }
+
+  .player-row { display: grid; gap: 12px; border-radius: 14px; padding: 12px 10px; transition: box-shadow .2s; }
+  .player-row.active { box-shadow: inset 0 0 0 2px var(--led), 0 0 22px #5dff8a22; }
+  .player-row .area-label b { color: var(--ink); font-size: 17px; }
+  .player-row.active .area-label b { color: var(--led); }
+  .hint { font-weight: 800; color: var(--led); text-align: center; font-size: 15px; }
+  .hint.done { color: var(--gold); }
+
+  /* 二人モード：左右にならんで 同時に 選ぶ */
+  .keys { display: flex; gap: 12px; justify-content: center; flex-wrap: wrap; }
+  .key { display: flex; align-items: center; gap: 8px; font-weight: 800; font-size: 15px; background: #04140e; border-radius: 10px; padding: 6px 12px 6px 6px; }
+  .key.off { opacity: .35; text-decoration: line-through; }
+  kbd {
+    font-family: var(--display); font-size: 20px; line-height: 1; min-width: 1.6em; text-align: center;
+    background: var(--card); color: var(--card-ink); border-radius: 6px; padding: 6px 8px;
+    box-shadow: 0 3px 0 #9aa3a8;
+  }
+  .key.super kbd { box-shadow: 0 3px 0 var(--super); }
+  .key.bug kbd { box-shadow: 0 3px 0 var(--bug); }
+  /* 二人モード（1画面）：タッチパネルの 左と右に すわって 向かいあう。
+     左の人（P1）の がわは 90ど、右の人（P2）の がわは -90ど 回転して、それぞれ 自分の ほうを むく */
+  .row-in { display: contents; }
+  body.duo-mode .wrap { max-width: 1700px; }   /* よこに ひろく つかう */
+  .msg.msg-mine { display: none; grid-area: auto; }
+  .board.duo {
+    --cw: clamp(56px, calc((100vh - 270px) / 5.7), 140px);
+    --side: calc(var(--cw) * 1.4 + 230px);
+    height: max(460px, calc(100vh - 190px)); box-sizing: border-box;
+    grid-template-columns: var(--side) minmax(0, 1fr) var(--side);
+    grid-template-rows: minmax(0, 1fr) auto;
+    grid-template-areas: "r1 arena r2" "r1 log r2"; gap: 12px;
+  }
+  .board.duo .player-row { position: relative; container-type: size; padding: 0; min-height: 0; }
+  .board.duo #rowP1 { grid-area: r1; }
+  .board.duo #rowP2 { grid-area: r2; }
+  .board.duo .row-in {
+    display: grid; gap: 10px; align-content: center; justify-items: center;
+    position: absolute; left: 50%; top: 50%; width: 100cqh; height: 100cqw; padding: 10px;
+    box-sizing: border-box;
+  }
+  .board.duo #rowP1 .row-in { transform: translate(-50%, -50%) rotate(90deg); }
+  .board.duo #rowP2 .row-in { transform: translate(-50%, -50%) rotate(-90deg); }
+  .board.duo #rowP2 .area-label { order: 10; }
+  .board.duo .msg.msg-mine { grid-area: auto; display: grid; min-height: 84px; align-content: center; }
+  .board.duo .msg-mine .big { font-size: clamp(24px, 4.6vh, 40px); }
+  .board.duo .msg-mine .big.count { font-size: clamp(34px, 6vh, 56px); }
+  .board.duo .msg-mine .sub { font-size: 15px; }
+  .board.duo .hand { gap: clamp(12px, 1.8vh, 22px); flex-wrap: nowrap; }
+  .board.duo .hand .card { --cw: inherit; touch-action: manipulation; }
+  .board.duo .arena { grid-area: arena; grid-template-columns: auto auto; grid-template-areas: "p1 p2"; justify-content: center; align-content: center; column-gap: clamp(60px, 8vw, 140px); padding: 0; }
+  .board.duo #msg { display: none; }
+  .board.duo .flip { --cw: clamp(70px, 15vh, 150px); }
+  .board.duo .slot.p1 { transform: rotate(90deg); }
+  .board.duo .slot.p2 { transform: rotate(-90deg); }
+  .board.duo .log { grid-area: log; min-height: 0; }
+
+  /* 2画面モード：プレイヤー2用の画面は 自分（P2）が 下に くるように 入れかえ */
+  .board.view-p2 #rowP1, .board.view-p2 #rowP1 .area-label { order: -1; }
+  .board.view-p2 #rowP2, .board.view-p2 #rowP2 .area-label { order: 10; }
+  .board.view-p2 .arena { grid-template-areas: "p1 msg p2"; }
+  .board.solo { gap: 10px; }
+  .board.solo .player-row { padding-block: 8px; }
+  .board.solo .arena { padding-block: 0; }
+  .board.solo .flip { --cw: clamp(80px, 9vw, 130px); }
+  .board.solo .hand .card { --cw: clamp(60px, 8vw, 116px); }
+  .board.solo .hand.small .card { --cw: clamp(36px, 4vw, 52px); }
+  .board.solo .log { min-height: 0; }
+  .twin { display: grid; gap: 8px; justify-items: center; }
+  .twin-status { color: var(--muted); font-size: 15px; font-weight: 800; display: flex; gap: 8px; align-items: center; justify-content: center; margin: 0; }
+  .twin-status.ok { color: var(--led); }
+  #waitSub { display: grid; gap: 26px; justify-items: center; text-align: center; padding-block: 40px; }
+  #waitSub .rules { justify-items: center; }
+
+  .arena { display: grid; grid-template-columns: 1fr minmax(180px, 1.3fr) 1fr; grid-template-areas: "p2 msg p1"; align-items: center; gap: 16px; padding-block: 8px; }
+  .slot { display: grid; justify-items: center; gap: 8px; }
+  .slot.p2 { grid-area: p2; }
+  .slot.p1 { grid-area: p1; }
+  .slot-label { font-weight: 800; font-size: 14px; color: var(--muted); letter-spacing: .06em; }
+  .msg { grid-area: msg; text-align: center; display: grid; gap: 6px; }
+  .msg .big { font-family: var(--display); font-size: clamp(28px, 3.6vw, 46px); line-height: 1.2; color: var(--ink); }
+  .msg .big.good { color: var(--led); text-shadow: 0 0 14px #5dff8a88; }
+  .msg .big.bad { color: var(--lose); }
+  .msg .big.count { color: var(--gold); font-size: clamp(44px, 6vw, 72px); }
+  .msg .sub { color: var(--muted); font-size: 16px; }
+  .msg .btn { justify-self: center; margin-top: 6px; }
+  .pop { animation: pop .3s cubic-bezier(.3,1.6,.5,1); }
+  @keyframes pop { from { transform: scale(.6); opacity: 0; } }
+
+  .log { display: flex; gap: 8px; flex-wrap: wrap; justify-content: center; min-height: 30px; }
+  .confetti { position: fixed; inset: 0; pointer-events: none; z-index: 20; overflow: hidden; }
+  .confetti i { position: absolute; top: -20px; width: 10px; height: 16px; border-radius: 2px; animation: fall linear forwards; }
+  @keyframes fall { to { transform: translateY(110vh) rotate(720deg); } }
+  .log span { background: #04140e; border-radius: 6px; padding: 3px 12px; font-size: 13px; color: var(--muted); font-variant-numeric: tabular-nums; }
+
+  /* ---------- overlays ---------- */
+  .overlay { position: fixed; inset: 0; background: #031510d9; display: grid; place-items: center; padding: 16px; z-index: 10; overflow-y: auto; }
+  .overlay.pass { background: var(--pcb); }
+  .sheet { background: var(--panel); border-radius: 18px; padding: 28px clamp(18px, 4vw, 44px); max-width: 580px; width: 100%; box-sizing: border-box; text-align: center; display: grid; gap: 14px; justify-items: center; box-shadow: 0 0 0 2px var(--gold), 0 20px 60px #0008; animation: pop .35s cubic-bezier(.3,1.6,.5,1); }
+  .sheet.wide { max-width: 820px; text-align: left; justify-items: stretch; }
+  .sheet .eyebrow { font-family: var(--display); color: var(--muted); letter-spacing: .12em; font-size: 14px; margin: 0; }
+  .sheet h2 { font-size: clamp(32px, 5vw, 48px); color: var(--led); text-shadow: 0 0 16px #5dff8a66; }
+  .sheet h2.bad { color: var(--lose); text-shadow: none; }
+  .sheet p { margin: 0; }
+  .sheet .who-big { font-family: var(--display); font-size: clamp(32px, 5vw, 48px); color: var(--gold); line-height: 1.2; }
+  .matchup { display: flex; gap: 26px; align-items: center; justify-content: center; flex-wrap: wrap; }
+  .matchup .card { --cw: 96px; }
+  .matchup .vs { font-family: var(--display); color: var(--gold); font-size: 22px; }
+  .gain { font-family: var(--display); font-size: 28px; color: var(--gold); }
+  .final-scores { display: flex; gap: 24px; justify-content: center; font-weight: 800; font-size: 18px; }
+  .final-scores b { font-family: var(--display); font-weight: 400; font-size: 44px; color: var(--led); display: block; line-height: 1.1; text-shadow: 0 0 10px #5dff8a88; }
+  .row-btns { display: flex; gap: 12px; flex-wrap: wrap; justify-content: center; }
+
+  @media (max-width: 700px) {
+    .arena { grid-template-columns: 1fr 1fr; grid-template-areas: "p2 p1" "msg msg"; }
+    .scores, .modes { grid-template-columns: 1fr; }
+    .rules .chain-row { font-size: 16px; }
+    .board-tag { display: none; }
+    .board.view-p2 .arena { grid-template-areas: "p1 p2" "msg msg"; }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after { animation: none !important; transition: none !important; }
+  }
+  .home-link { justify-self: start; color: var(--muted); font-weight: 800; text-decoration: none; border-radius: 10px; padding: 6px 14px; box-shadow: inset 0 0 0 2px var(--line); }
+  .home-link:hover { color: var(--ink); box-shadow: inset 0 0 0 2px var(--led); }
+  .home-link:focus-visible { outline: 4px solid #fff; outline-offset: 3px; }
+  [hidden] { display: none !important; }
+</style>
+
+<div class="wrap">
+
+  <!-- タイトル -->
+  <section id="title">
+    <a class="home-link" href="index.html">← ゲームを 選ぶ</a>
+    <h1 class="logo">スパコンとバグ<small>3しゅるいの カードで よみあい勝負！</small></h1>
+    <div class="title-cards" id="titleCards"></div>
+
+    <div class="modes" role="group" aria-label="モードを選ぶ">
+      <button class="mode" type="button" id="modeCpu" aria-pressed="true">
+        <span class="mt"><span class="led"></span>一人で 遊ぶ</span>
+        <span class="md">コンピューターと 対戦。コンピューターは あなたの くせを おぼえるよ。</span>
+      </button>
+      <button class="mode" type="button" id="mode2p" aria-pressed="false">
+        <span class="mt"><span class="led"></span>二人で 遊ぶ</span>
+        <span class="md">タッチパネルを はさんで 向かいあって、カードを タッチして こっそり 選ぶよ。</span>
+      </button>
+      <button class="mode" type="button" id="modeNet" aria-pressed="false">
+        <span class="mt"><span class="led"></span>通信で 遊ぶ</span>
+        <span class="md">べつの パソコンや スマホと インターネットで つないで 対戦するよ。</span>
+      </button>
+    </div>
+
+    <div class="net" id="netBox" hidden>
+      <label for="netName">あなたの なまえ<input id="netName" type="text" maxlength="8" placeholder="なまえ"></label>
+      <div class="net-row" id="netPick">
+        <button class="btn small" id="netHostBtn" type="button">へやを つくる</button>
+        <span class="net-or">または</span>
+        <input id="netCode" type="text" inputmode="numeric" maxlength="4" placeholder="4けたの ばんごう" aria-label="へやの ばんごう">
+        <button class="btn small" id="netJoinBtn" type="button">さんかする</button>
+      </div>
+      <div class="net-code" id="netCodeShow" hidden></div>
+      <p class="twin-status" id="netStatus"></p>
+      <button class="btn ghost small" id="netLeaveBtn" type="button" hidden>つうしんを きる</button>
+    </div>
+
+    <div class="names" id="namesBox" hidden>
+      <label for="p1Name">プレイヤー1 の なまえ<input id="p1Name" type="text" maxlength="8" placeholder="プレイヤー1"></label>
+      <label for="p2Name">プレイヤー2 の なまえ<input id="p2Name" type="text" maxlength="8" placeholder="プレイヤー2"></label>
+    </div>
+
+    <div class="twin" id="twinBox" hidden>
+      <button class="btn ghost small" id="openSubBtn" type="button">モニター2まいで 遊ぶ：プレイヤー2の 画面を ひらく</button>
+      <span class="twin-status" id="twinStatus"></span>
+    </div>
+
+    <button class="btn" id="startBtn" type="button">スタート</button>
+
+    <div class="rules" id="rulesBlock">
+      <h2>だれが だれに 勝つ？</h2>
+      <div class="chain" id="chain"></div>
+      <h2>遊び方</h2>
+      <ol>
+        <li><b>スパコンチーム</b>は「スパコン1まい＋ロボット4まい」、<b>バグチーム</b>は「バグ1まい＋ロボット4まい」をもつ。</li>
+        <li>おたがいに カードを1まいずつ 出して、同時に めくる。</li>
+        <li>ロボット どうしは <b>引き分け</b>。次のカードで もう一回。</li>
+        <li>勝ち負けが きまったら ラウンド終わり。ラウンドごとに チームを 交代する。</li>
+        <li>6ラウンドで 点数が多いほうの勝ち！</li>
+      </ol>
+      <div class="pts-note">
+        <span class="pill super">スパコンチームで勝つ ＝ 1点</span>
+        <span class="pill bug">バグチームで勝つ ＝ 4点</span>
+      </div>
+      <p style="margin:0;color:var(--muted)">バグが スパコンを 止めるのは むずかしいから、点数が大きいよ。相手が いつ スパコンを 出すか、よく考えよう！</p>
+      <p style="margin:0;color:var(--muted)"><b style="color:var(--ink)">二人で 遊ぶとき：</b>タッチパネルを はさんで 向かいあって すわろう。自分の 前の カードを 手で かくして タッチすれば、相手に ばれないよ！ 二人とも 選ぶと 自動で オープン。（キーボードなら 手前の人は <b style="color:var(--ink)">A</b>／<b style="color:var(--ink)">D</b>、向こうの人は <b style="color:var(--ink)">←</b>／<b style="color:var(--ink)">→</b>）</p>
+      <p style="margin:0;color:var(--muted)"><b style="color:var(--ink)">モニターが 2まい あるとき：</b>「プレイヤー2の 画面を ひらく」で 出てきた ウィンドウを 2まいめの モニターに 動かすと、一人1まいずつ 画面を つかえるよ。キーボードを 2つ つなぐと もっと 遊びやすい！</p>
+      <p style="margin:0;color:var(--muted)"><b style="color:var(--ink)">通信で 遊ぶとき：</b>一人が「へやを つくる」を おすと 4けたの ばんごうが 出るよ。もう一人は べつの パソコンや スマホで その ばんごうを 入れて「さんかする」。つながったら へやを つくった人が「スタート」！</p>
+    </div>
+  </section>
+
+  <!-- 2画面モード：プレイヤー2用の 画面の まちうけ -->
+  <section id="waitSub" hidden>
+    <h1 class="logo">スパコンとバグ<small>プレイヤー2 の 画面</small></h1>
+    <div class="rules">
+      <p id="subStatus" class="twin-status"></p>
+      <ol>
+        <li>この ウィンドウを 2まいめの モニターに 動かす</li>
+        <li>下の「全画面」を おす</li>
+        <li>もう一方の 画面で「スタート」を おすと 始まるよ</li>
+      </ol>
+      <button class="btn ghost small" id="subFsBtn" type="button">全画面</button>
+    </div>
+  </section>
+
+  <!-- ゲーム -->
+  <section id="game" hidden>
+    <div class="wrap">
+      <div class="topbar">
+        <h1>スパコンとバグ</h1>
+        <span class="round-chip" id="roundChip">ROUND 1/6</span>
+        <div class="tools">
+          <button class="btn ghost small" id="rulesBtn" type="button">ルール</button>
+          <button class="btn ghost small" id="soundBtn" type="button">音：ON</button>
+          <button class="btn ghost small" id="fsBtn" type="button">全画面</button>
+          <button class="btn ghost small" id="quitBtn" type="button">やめる</button>
+        </div>
+      </div>
+
+      <div class="scores">
+        <div class="score"><span class="who"><span id="p1Label"></span> <span class="pill" id="p1Team"></span></span><span class="num" id="p1Score">0</span></div>
+        <div class="score"><span class="who"><span id="p2Label"></span> <span class="pill" id="p2Team"></span></span><span class="num" id="p2Score">0</span></div>
+      </div>
+
+      <div class="board">
+        <span class="silk board-tag">E-CARD BOARD</span>
+        <span class="silk board-tag r">Rev.2.0</span>
+
+        <div class="player-row" id="rowP2"><div class="row-in">
+          <div class="msg msg-mine" id="msgP2" aria-hidden="true"></div>
+          <div class="area-label" id="infoP2"></div>
+          <div class="hand" id="handP2"></div>
+          <div class="keys" id="keysP2" hidden></div>
+          <div class="hint" id="hintP2"></div>
+        </div></div>
+
+        <div class="arena">
+          <div class="slot p2"><span class="slot-label" id="slotLabelP2"></span><div class="flip empty" id="slotP2"></div></div>
+          <div class="msg" id="msg"></div>
+          <div class="slot p1"><span class="slot-label" id="slotLabelP1"></span><div class="flip empty" id="slotP1"></div></div>
+        </div>
+
+        <div class="log" id="log"></div>
+
+        <div class="player-row" id="rowP1"><div class="row-in">
+          <div class="msg msg-mine" id="msgP1" aria-hidden="true"></div>
+          <div class="hand" id="handP1"></div>
+          <div class="keys" id="keysP1" hidden></div>
+          <div class="hint" id="hintP1"></div>
+          <div class="area-label" id="infoP1"></div>
+        </div></div>
+      </div>
+    </div>
+  </section>
+</div>
+
+<div class="overlay" id="roundEnd" hidden><div class="sheet" id="roundEndSheet"></div></div>
+<div class="overlay" id="rulesModal" hidden>
+  <div class="sheet wide">
+    <div id="rulesHolder"></div>
+    <div class="row-btns"><button class="btn" id="closeRules" type="button">とじる</button></div>
+  </div>
+</div>
+
+<!-- ===== FX：はでな 演出（花火・火花・光の輪・稲妻・スタンプ・カットイン） ===== -->
+<style>
+  #fxCanvas { position: fixed; inset: 0; width: 100vw; height: 100vh; pointer-events: none; z-index: 60; }
+  .fx-flash { position: fixed; inset: 0; pointer-events: none; z-index: 59; animation: fxFlash .45s ease-out forwards; }
+  @keyframes fxFlash { from { opacity: .75; } to { opacity: 0; } }
+  .fx-stamp {
+    position: fixed; z-index: 61; pointer-events: none; transform: translate(-50%, -50%) rotate(var(--rot, -8deg));
+    font-family: "DotGothic16", "MS Gothic", monospace; font-size: var(--size, 64px); line-height: 1; white-space: nowrap;
+    color: var(--col, #e8b64c); padding: .12em .4em; border: .08em solid currentColor; border-radius: .18em;
+    background: #031510cc; text-shadow: 0 0 .3em currentColor; box-shadow: 0 0 .5em currentColor, inset 0 0 .3em currentColor;
+    animation: fxStamp var(--dur, 1.1s) cubic-bezier(.2, 1.6, .4, 1) forwards;
+  }
+  @keyframes fxStamp {
+    0% { transform: translate(-50%, -50%) rotate(var(--rot, -8deg)) scale(3); opacity: 0; }
+    18% { transform: translate(-50%, -50%) rotate(var(--rot, -8deg)) scale(.92); opacity: 1; }
+    28% { transform: translate(-50%, -50%) rotate(var(--rot, -8deg)) scale(1.05); }
+    75% { transform: translate(-50%, -50%) rotate(var(--rot, -8deg)) scale(1); opacity: 1; }
+    100% { transform: translate(-50%, -60%) rotate(var(--rot, -8deg)) scale(1); opacity: 0; }
+  }
+  .fx-banner { position: fixed; left: 0; right: 0; top: 50%; z-index: 62; pointer-events: none; transform: translateY(-50%) rotate(var(--rot, 0deg));
+    display: flex; flex-direction: column; align-items: center; justify-content: center; height: var(--h, 130px); overflow: hidden; }
+  .fx-banner::before { content: ""; position: absolute; inset: 0; background: linear-gradient(90deg, transparent, var(--col) 12%, var(--col) 88%, transparent);
+    opacity: .92; animation: fxBand var(--dur, 1.3s) cubic-bezier(.7, 0, .3, 1) forwards; transform-origin: left; }
+  .fx-banner::after { content: ""; position: absolute; inset: 0; background: repeating-linear-gradient(115deg, #fff3 0 6px, transparent 6px 40px);
+    animation: fxStripe .5s linear infinite, fxBand var(--dur, 1.3s) cubic-bezier(.7, 0, .3, 1) forwards; }
+  .fx-banner b { position: relative; font-family: "DotGothic16", "MS Gothic", monospace; font-weight: 400; font-size: calc(var(--h, 130px) * .48); line-height: 1.1;
+    color: #fff; text-shadow: 0 4px 0 #0008, 0 0 24px #fff; letter-spacing: .06em; white-space: nowrap;
+    animation: fxBannerText var(--dur, 1.3s) cubic-bezier(.2, .9, .2, 1) forwards; }
+  .fx-banner small { position: relative; margin-top: -.2em; font-family: "M PLUS Rounded 1c", sans-serif; font-weight: 800; font-size: calc(var(--h, 130px) * .15); color: #fff; text-shadow: 0 2px 0 #0008;
+    animation: fxBannerText var(--dur, 1.3s) cubic-bezier(.2, .9, .2, 1) forwards; }
+  @keyframes fxBand { 0% { transform: scaleY(0); } 15% { transform: scaleY(1); } 82% { transform: scaleY(1); opacity: .92; } 100% { transform: scaleY(0); opacity: 0; } }
+  @keyframes fxStripe { to { background-position: 46px 0; } }
+  @keyframes fxBannerText { 0% { transform: translateX(110vw) skewX(-20deg); } 18% { transform: translateX(-2vw) skewX(-8deg); } 26% { transform: none; }
+    76% { transform: translateX(-3vw); opacity: 1; } 100% { transform: translateX(-120vw) skewX(20deg); opacity: 0; } }
+  .fx-shake { animation: fxShake var(--dur, .4s) linear; }
+  @keyframes fxShake { 10%, 50%, 90% { transform: translate(calc(var(--amp, 8px) * -1), calc(var(--amp, 8px) * .5)); } 30%, 70% { transform: translate(var(--amp, 8px), calc(var(--amp, 8px) * -.5)); } }
+  @media (prefers-reduced-motion: reduce) { #fxCanvas, .fx-flash, .fx-banner, .fx-stamp { display: none !important; } }
+</style>
+<canvas id="fxCanvas" aria-hidden="true"></canvas>
+<script>
+// どの ゲームからも つかえる エフェクト：FX.burst / FX.ring / FX.fireworks / FX.lightning / FX.stamp / FX.banner / FX.flash / FX.shake
+window.FX = (() => {
+  const cv = document.getElementById('fxCanvas'), ctx = cv.getContext('2d');
+  let W = 0, H = 0, DPR = 1, parts = [], rings = [], bolts = [], running = false, last = 0;
+  const reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
+  // ---- 花火の 音（ヒューッ → ドーン → パチパチ）。「おと」ボタンが OFF の ときは 鳴らさない ----
+  const SND = (() => {
+    let ac = null, out = null, nb = null, lastBoom = 0;
+    function init() {
+      if (ac) return true;
+      try {
+        ac = new (window.AudioContext || window.webkitAudioContext)();
+        const comp = ac.createDynamicsCompressor(); comp.threshold.value = -10;
+        out = ac.createGain(); out.gain.value = .8; out.connect(comp).connect(ac.destination);
+        nb = ac.createBuffer(1, ac.sampleRate * 2, ac.sampleRate);
+        const d = nb.getChannelData(0); for (let k = 0; k < d.length; k++) d[k] = Math.random() * 2 - 1;
+        return true;
+      } catch (e) { return false; }
+    }
+    const on = () => !(window.BGM && !window.BGM.enabled) && init() && ac.state !== 'closed';
+    addEventListener('pointerdown', () => { if (ac && ac.state === 'suspended') ac.resume(); }, { capture: true, passive: true });
+    function pan(x) { const p = ac.createStereoPanner ? ac.createStereoPanner() : null; if (p) { p.pan.value = Math.max(-.9, Math.min(.9, (x / (W || 1)) * 2 - 1)); p.connect(out); return p; } return out; }
+    function noise(t0, dur, { type = 'lowpass', f0 = 800, f1, vol = .3, q = 1, dest }) {
+      const s = ac.createBufferSource(), f = ac.createBiquadFilter(), g = ac.createGain();
+      s.buffer = nb; s.loopStart = Math.random(); f.type = type; f.Q.value = q;
+      f.frequency.setValueAtTime(f0, t0); if (f1) f.frequency.exponentialRampToValueAtTime(f1, t0 + dur);
+      g.gain.setValueAtTime(vol, t0); g.gain.exponentialRampToValueAtTime(.0008, t0 + dur);
+      s.connect(f).connect(g).connect(dest); s.start(t0, Math.random() * 1.2); s.stop(t0 + dur + .05);
+    }
+    // ヒューッ（うちあげ）
+    function whistle(x, dur) {
+      if (!on()) return;
+      const t0 = ac.currentTime, dest = pan(x), o = ac.createOscillator(), g = ac.createGain();
+      o.type = 'sine'; o.frequency.setValueAtTime(500 + Math.random() * 200, t0); o.frequency.exponentialRampToValueAtTime(1600 + Math.random() * 600, t0 + dur);
+      g.gain.setValueAtTime(0, t0); g.gain.linearRampToValueAtTime(.035, t0 + .08); g.gain.linearRampToValueAtTime(.02, t0 + dur * .9); g.gain.linearRampToValueAtTime(0, t0 + dur);
+      o.connect(g).connect(dest); o.start(t0); o.stop(t0 + dur + .05);
+      noise(t0, dur, { type: 'bandpass', f0: 1200, f1: 4000, vol: .05, q: 3, dest });
+    }
+    // ドーン ＋ パチパチ
+    function boom(x, big = 1) {
+      if (!on()) return;
+      const now = ac.currentTime;
+      if (now - lastBoom < .07) return;   // 鳴らしすぎない
+      lastBoom = now;
+      const t0 = now, dest = pan(x), o = ac.createOscillator(), g = ac.createGain();
+      o.type = 'sine'; o.frequency.setValueAtTime(110 * big, t0); o.frequency.exponentialRampToValueAtTime(32, t0 + .5);
+      g.gain.setValueAtTime(.55 * big, t0); g.gain.exponentialRampToValueAtTime(.001, t0 + .7);
+      o.connect(g).connect(dest); o.start(t0); o.stop(t0 + .75);
+      noise(t0, 1.1 * big, { type: 'lowpass', f0: 1400, f1: 120, vol: .5 * big, dest });
+      noise(t0, .08, { type: 'highpass', f0: 2000, vol: .35, dest });
+      // パチパチ（小さな はじける音を ばらばらに）
+      const n = Math.round(14 * big);
+      for (let k = 0; k < n; k++) noise(t0 + .18 + Math.random() * .9, .025, { type: 'highpass', f0: 3000 + Math.random() * 4000, vol: .06 + Math.random() * .08, dest });
+    }
+    return { whistle, boom };
+  })();
+  function size() { DPR = Math.min(devicePixelRatio || 1, 2); W = innerWidth; H = innerHeight; cv.width = W * DPR; cv.height = H * DPR; ctx.setTransform(DPR, 0, 0, DPR, 0, 0); }
+  addEventListener('resize', size); size();
+  const COLORS = ['#5dff8a', '#e8b64c', '#ff6b5e', '#3fb4ff', '#c38bff', '#fbfbf7'];
+  const pick = a => a[Math.floor(Math.random() * a.length)];
+  function kick() { if (!running && !reduce) { running = true; last = performance.now(); requestAnimationFrame(loop); } }
+  function loop(t) {
+    const dt = Math.min(.04, (t - last) / 1000); last = t;
+    ctx.clearRect(0, 0, W, H);
+    ctx.globalCompositeOperation = 'lighter';
+    for (const p of parts) {
+      p.life -= dt; p.vy += p.g * dt; p.vx *= p.drag; p.vy *= p.drag; p.x += p.vx * dt; p.y += p.vy * dt; p.rot += p.spin * dt;
+      const a = Math.max(0, Math.min(1, p.life / p.max * 1.6));
+      ctx.globalAlpha = a; ctx.fillStyle = p.c;
+      if (p.shape === 'spark') {
+        ctx.strokeStyle = p.c; ctx.lineWidth = p.s * .6; ctx.beginPath(); ctx.moveTo(p.x, p.y); ctx.lineTo(p.x - p.vx * .03, p.y - p.vy * .03); ctx.stroke();
+      } else if (p.shape === 'confetti') {
+        ctx.globalCompositeOperation = 'source-over';
+        ctx.save(); ctx.translate(p.x, p.y); ctx.rotate(p.rot); ctx.scale(1, Math.cos(p.rot * 2)); ctx.fillRect(-p.s, -p.s * .6, p.s * 2, p.s * 1.2); ctx.restore();
+        ctx.globalCompositeOperation = 'lighter';
+      } else if (p.shape === 'star') {
+        ctx.save(); ctx.translate(p.x, p.y); ctx.rotate(p.rot); ctx.beginPath();
+        for (let k = 0; k < 10; k++) { const r = k % 2 ? p.s * .45 : p.s; ctx.lineTo(Math.cos(k * Math.PI / 5) * r, Math.sin(k * Math.PI / 5) * r); }
+        ctx.fill(); ctx.restore();
+      } else { ctx.beginPath(); ctx.arc(p.x, p.y, Math.max(.5, p.s * a + .5), 0, Math.PI * 2); ctx.fill(); }
+      if (p.shell && p.life <= 0) { burst(p.x, p.y, { colors: p.shell, n: 70, speed: 360, size: 3, gravity: 160, shape: 'spark', life: 1.2 }); SND.boom(p.x, .8 + Math.random() * .3); }
+    }
+    parts = parts.filter(p => p.life > 0);
+    for (const r of rings) {
+      r.t += dt; const k = r.t / r.dur;
+      ctx.globalAlpha = Math.max(0, 1 - k); ctx.strokeStyle = r.c; ctx.lineWidth = r.w * (1 - k) + 1;
+      ctx.beginPath(); ctx.arc(r.x, r.y, Math.max(1, r.r0 + (r.r1 - r.r0) * (1 - Math.pow(1 - Math.min(1, k), 3))), 0, Math.PI * 2); ctx.stroke();
+    }
+    rings = rings.filter(r => r.t < r.dur);
+    for (const b of bolts) {
+      b.t += dt; const a = Math.max(0, 1 - b.t / b.dur);
+      ctx.globalAlpha = a; ctx.strokeStyle = b.c; ctx.lineWidth = 3 + 4 * a; ctx.shadowBlur = 20; ctx.shadowColor = b.c;
+      ctx.beginPath(); b.pts.forEach((q, k) => k ? ctx.lineTo(q[0], q[1]) : ctx.moveTo(q[0], q[1])); ctx.stroke();
+      ctx.strokeStyle = '#fff'; ctx.lineWidth = 1.5; ctx.stroke(); ctx.shadowBlur = 0;
+      if (Math.random() < .5) b.pts = jag(b.x1, b.y1, b.x2, b.y2);   // ビリビリ ゆれる
+    }
+    bolts = bolts.filter(b => b.t < b.dur);
+    ctx.globalAlpha = 1; ctx.globalCompositeOperation = 'source-over';
+    if (parts.length || rings.length || bolts.length) requestAnimationFrame(loop); else { running = false; ctx.clearRect(0, 0, W, H); }
+  }
+  function center(el) { const r = el.getBoundingClientRect(); return [r.left + r.width / 2, r.top + r.height / 2]; }
+  function at(target) { return Array.isArray(target) ? target : target && target.getBoundingClientRect ? center(target) : [W / 2, H / 2]; }
+  function burst(target, y, o = {}) {
+    let x;
+    if (typeof target === 'number') x = target; else { o = y || {}; [x, y] = at(target); }
+    const n = o.n ?? 40, sp = o.speed ?? 320, cols = o.colors || COLORS;
+    for (let k = 0; k < n; k++) {
+      const a = (o.angle ?? Math.random() * Math.PI * 2) + (o.angle != null ? (Math.random() - .5) * (o.spread ?? 1) : 0);
+      const s = sp * (.35 + Math.random() * .8), life = (o.life ?? .9) * (.6 + Math.random() * .6);
+      parts.push({ x, y, vx: Math.cos(a) * s, vy: Math.sin(a) * s, g: o.gravity ?? 260, drag: o.drag ?? .97, life, max: life,
+        s: (o.size ?? 4) * (.6 + Math.random() * .8), c: pick(cols), shape: o.shape || pick(['dot', 'spark', 'star']), rot: Math.random() * 6, spin: (Math.random() - .5) * 12 });
+    }
+    kick();
+  }
+  function ring(target, o = {}) {
+    const [x, y] = at(target);
+    rings.push({ x, y, c: o.color || '#e8b64c', r0: o.from ?? 10, r1: o.to ?? 220, w: o.width ?? 10, dur: o.dur ?? .6, t: 0 });
+    kick();
+  }
+  function jag(x1, y1, x2, y2) {
+    const pts = [[x1, y1]], n = 9, len = Math.hypot(x2 - x1, y2 - y1), nx = -(y2 - y1) / (len || 1), ny = (x2 - x1) / (len || 1);
+    for (let k = 1; k < n; k++) { const t = k / n, off = (Math.random() - .5) * Math.min(60, len * .18); pts.push([x1 + (x2 - x1) * t + nx * off, y1 + (y2 - y1) * t + ny * off]); }
+    pts.push([x2, y2]); return pts;
+  }
+  function lightning(a, b, o = {}) {
+    const [x1, y1] = at(a), [x2, y2] = at(b);
+    bolts.push({ x1, y1, x2, y2, pts: jag(x1, y1, x2, y2), c: o.color || '#5dff8a', t: 0, dur: o.dur ?? .55 });
+    kick();
+  }
+  // 花火：下から うちあげて ひらく
+  function fireworks(count = 6, o = {}) {
+    for (let k = 0; k < count; k++) setTimeout(() => {
+      const x = W * (.12 + Math.random() * .76), cols = [pick(o.colors || COLORS), pick(o.colors || COLORS), '#fbfbf7'];
+      const life = .75 + Math.random() * .35;
+      parts.push({ x, y: H + 10, vx: (Math.random() - .5) * 120, vy: -(H * .9 + Math.random() * H * .4), g: 900, drag: 1, life, max: life, s: 4, c: '#fff6c8', shape: 'dot', rot: 0, spin: 0, shell: cols });
+      SND.whistle(x, life);
+      kick();
+    }, k * (o.gap ?? 260));
+  }
+  function confetti(n = 140, o = {}) {
+    for (let k = 0; k < n; k++) {
+      const life = 3 + Math.random() * 2;
+      parts.push({ x: Math.random() * W, y: -20 - Math.random() * H * .3, vx: (Math.random() - .5) * 120, vy: 80 + Math.random() * 160, g: 60, drag: .995, life, max: life,
+        s: 5 + Math.random() * 4, c: pick(o.colors || COLORS), shape: 'confetti', rot: Math.random() * 6, spin: (Math.random() - .5) * 10 });
+    }
+    kick();
+  }
+  function stamp(text, target, o = {}) {
+    if (reduce) return;
+    const [x, y] = at(target), el = document.createElement('div');
+    el.className = 'fx-stamp'; el.innerHTML = text;
+    el.style.left = x + 'px'; el.style.top = y + 'px';
+    el.style.setProperty('--col', o.color || '#e8b64c'); el.style.setProperty('--size', (o.size || 64) + 'px');
+    el.style.setProperty('--rot', (o.rot ?? -8) + 'deg'); el.style.setProperty('--dur', (o.dur || 1.1) + 's');
+    if (o.rotate) el.style.rotate = o.rotate + 'deg';
+    document.body.appendChild(el); setTimeout(() => el.remove(), (o.dur || 1.1) * 1000 + 50);
+  }
+  function banner(text, sub = '', o = {}) {
+    if (reduce) return;
+    document.querySelectorAll('.fx-banner').forEach(b => b.remove());   // かさならない ように
+    const el = document.createElement('div');
+    el.className = 'fx-banner'; el.innerHTML = `<b>${text}</b>${sub ? `<small>${sub}</small>` : ''}`;
+    el.style.setProperty('--col', o.color || '#e8b64c'); el.style.setProperty('--h', (o.height || Math.min(150, innerHeight * .18)) + 'px');
+    el.style.setProperty('--dur', (o.dur || 1.3) + 's'); el.style.setProperty('--rot', (o.rot || 0) + 'deg');
+    document.body.appendChild(el); setTimeout(() => el.remove(), (o.dur || 1.3) * 1000 + 50);
+  }
+  function flash(color = '#fff') {
+    if (reduce) return;
+    const el = document.createElement('div'); el.className = 'fx-flash'; el.style.background = color;
+    document.body.appendChild(el); setTimeout(() => el.remove(), 500);
+  }
+  function shake(el = document.body, amp = 8, dur = .4) {
+    if (reduce || !el) return;
+    el.classList.remove('fx-shake'); void el.offsetWidth;
+    el.style.setProperty('--amp', amp + 'px'); el.style.setProperty('--dur', dur + 's'); el.classList.add('fx-shake');
+    setTimeout(() => el.classList.remove('fx-shake'), dur * 1000);
+  }
+  // 勝利：勝った人の 色の 花火を なんども うちあげる
+  function shade(hex, k) {   // k>0 で あかるく、k<0 で くらく
+    const n = parseInt(hex.slice(1), 16), c = [n >> 16, (n >> 8) & 255, n & 255].map(v => Math.round(k > 0 ? v + (255 - v) * k : v * (1 + k)));
+    return '#' + c.map(v => v.toString(16).padStart(2, '0')).join('');
+  }
+  let victoryTimers = [];
+  function victory(color, o = {}) {
+    stopVictory();
+    const cols = [color, shade(color, .35), shade(color, .6), shade(color, -.2), '#fbfbf7'];
+    const secs = o.seconds ?? 7;
+    flash(color + '66');
+    for (let k = 0; k < secs * 2; k++) victoryTimers.push(setTimeout(() => {
+      fireworks(3, { colors: [color, shade(color, .35), shade(color, .6)], gap: 140 });
+      if (k % 2 === 0) { const x = W * (.15 + Math.random() * .7), y = H * (.15 + Math.random() * .4); burst(x, y, { colors: cols, n: 80, speed: 480, gravity: 120, shape: 'star' }); ring([x, y], { color, to: 260, width: 10 }); SND.boom(x, 1.2); }
+    }, k * 500));
+    confetti(o.confetti ?? 200, { colors: cols });
+    victoryTimers.push(setTimeout(() => confetti(120, { colors: cols }), 2500));
+  }
+  function stopVictory() { victoryTimers.forEach(clearTimeout); victoryTimers = []; }
+  return { burst, ring, lightning, fireworks, confetti, stamp, banner, flash, shake, center, victory, stopVictory, shade, sound: SND };
+})();
+</script>
+<!-- ===== /FX ===== -->
+<!-- ===== COMMON：今日の 記録 ／ ほうちで ゲーム選びに もどる ／ デモ ===== -->
+<style>
+  .idle-toast { position: fixed; left: 50%; bottom: 18px; transform: translateX(-50%); z-index: 90; pointer-events: none;
+    font: 800 clamp(15px, 2.4vh, 20px) "M PLUS Rounded 1c", "Yu Gothic", sans-serif; color: #f2f5ec; background: #031510ee;
+    border-radius: 14px; padding: 10px 20px; box-shadow: 0 0 0 2px #e8b64c, 0 10px 30px #0008; white-space: nowrap; }
+  .idle-toast b { font-family: "DotGothic16", monospace; font-weight: 400; color: #e8b64c; font-size: 1.3em; margin: 0 .2em; }
+</style>
+<script>
+// デモ表示用（ゲーム選択画面の うしろで 動く 見本）：?demo が ついて いたら 音なし・記録 なし
+window.DEMO = new URLSearchParams(location.search).has('demo');
+
+// ---- 今日の 記録（この パソコンの ブラウザに 保存。日づけが かわると リセット）----
+window.REC = (() => {
+  const KEY = 'kosen-records';
+  const today = () => { const d = new Date(); return `${d.getFullYear()}-${d.getMonth() + 1}-${d.getDate()}`; };
+  function load() {
+    try { const all = JSON.parse(localStorage.getItem(KEY) || '{}'); return all.date === today() ? all : { date: today() }; }
+    catch (e) { return { date: today() }; }
+  }
+  function save(all) { try { localStorage.setItem(KEY, JSON.stringify(all)); } catch (e) {} }
+  return {
+    all: load,
+    get: game => load()[game] || {},
+    // fn(いまの 記録) が あたらしい 記録を かえす
+    update(game, fn) {
+      if (window.DEMO) return;
+      const all = load(); all[game] = fn(all[game] || {}) || all[game]; save(all);
+    },
+    clear() { save({ date: today() }); }
+  };
+})();
+
+// ---- ほうち タイマー：さわらない まま 一定時間で ゲーム選びに もどる ----
+window.IDLE = (() => {
+  let limit = 0, warnAt = 15, left = 0, timer = 0, toast = null, onTimeout = null, paused = () => false;
+  function reset() { left = limit; if (toast) { toast.remove(); toast = null; } }
+  function tick() {
+    if (!limit || paused()) { reset(); return; }
+    left--;
+    if (left <= warnAt && left > 0) {
+      if (!toast) { toast = document.createElement('div'); toast.className = 'idle-toast'; document.body.appendChild(toast); }
+      toast.innerHTML = `さわらないと あと<b>${left}</b>秒で ゲーム選びに もどるよ`;
+    }
+    if (left <= 0) { reset(); (onTimeout || (() => { location.href = 'index.html'; }))(); }
+  }
+  ['pointerdown', 'pointermove', 'keydown', 'touchstart', 'wheel'].forEach(ev => addEventListener(ev, reset, { capture: true, passive: true }));
+  return {
+    // seconds 秒 さわらなければ もどる。warn 秒 まえから おしらせ
+    start({ seconds = 120, warn = 15, home, pause } = {}) {
+      if (window.DEMO) return;
+      limit = seconds; warnAt = warn; onTimeout = home; if (pause) paused = pause;
+      reset(); clearInterval(timer); timer = setInterval(tick, 1000);
+    },
+    stop() { limit = 0; reset(); clearInterval(timer); },
+    reset
+  };
+})();
+</script>
+<!-- ===== /COMMON ===== -->
+<!-- ===== NET：インターネットで 2台を つなぐ（PeerJS ＝ WebRTC。サーバーは いらない） ===== -->
+<script>
+window.NET = (() => {
+  const LIB = 'https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js';
+  let peer = null, conn = null, game = '', beatT = 0, waitT = 0, lastIn = 0;
+  const ev = {}, emit = (k, ...a) => ev[k] && ev[k](...a);
+  // ライブラリは 通信対戦を つかう ときだけ 読みこむ（ネットが なくても ほかの モードは 遊べる）
+  function load() {
+    if (window.Peer) return Promise.resolve();
+    return new Promise((ok, ng) => {
+      const s = document.createElement('script'); s.src = LIB;
+      s.onload = ok; s.onerror = () => { s.remove(); ng(new Error('lib')); };
+      document.head.appendChild(s);
+    });
+  }
+  const idOf = code => `kosen-ecard-${game}-${code}`;
+  function bind(c) {
+    conn = c;
+    clearTimeout(waitT);
+    waitT = setTimeout(() => { if (conn === c && !c.open) { drop(c); emit('error', 'timeout'); } }, 15000);
+    c.on('open', () => {
+      if (conn !== c) return;
+      clearTimeout(waitT); lastIn = Date.now(); c.wasOpen = true;
+      // とじた 合図が とどかない ことも あるので、2秒ごとに 合図を おくりあう
+      clearInterval(beatT);
+      beatT = setInterval(() => { send({ t: 'net-beat' }); if (Date.now() - lastIn > 9000) drop(c); }, 2000);
+      emit('open');
+    });
+    c.on('data', m => { if (conn !== c) return; lastIn = Date.now(); if (m && m.t !== 'net-beat') emit('data', m); });
+    c.on('close', () => drop(c));
+    c.on('error', () => drop(c));
+  }
+  function drop(c) {
+    if (!c || conn !== c) return;
+    const was = c.wasOpen;
+    conn = null; clearInterval(beatT); clearTimeout(waitT);
+    try { c.close(); } catch (e) {}
+    if (was) emit('close');
+  }
+  function watch(p) {
+    p.on('error', e => {
+      if (peer !== p || (conn && conn.open)) return;   // つながった あとの サーバーの エラーは 気にしない
+      if (e.type === 'unavailable-id') return emit('retry');
+      if (e.type === 'peer-unavailable') { conn = null; clearTimeout(waitT); }
+      emit('error', e.type);
+    });
+  }
+  // へやを つくる：4けたの ばんごうを きめて 相手を まつ
+  async function host(g, tries = 0) {
+    game = g; leave();
+    try { await load(); } catch (e) { return emit('error', 'lib'); }
+    const code = String(1000 + Math.floor(Math.random() * 9000));
+    const p = peer = new Peer(idOf(code), { debug: 0 });
+    watch(p);
+    ev.retry = () => { if (tries < 5) host(g, tries + 1); else emit('error', 'unavailable-id'); };
+    p.on('open', () => { if (peer === p) emit('code', code); });
+    p.on('connection', c => {
+      if (peer !== p) return;
+      if (conn) { c.on('open', () => c.close()); return; }   // 3人めは ことわる
+      bind(c);
+    });
+  }
+  // ばんごうの へやに さんかする
+  async function join(g, code) {
+    game = g; leave();
+    try { await load(); } catch (e) { return emit('error', 'lib'); }
+    const p = peer = new Peer({ debug: 0 });
+    watch(p);
+    p.on('open', () => { if (peer === p) bind(p.connect(idOf(code), { reliable: true, serialization: 'json' })); });
+  }
+  function send(m) { if (conn && conn.open) try { conn.send(m); } catch (e) {} }
+  function leave() {
+    const c = conn, p = peer;
+    conn = null; peer = null; clearInterval(beatT); clearTimeout(waitT);
+    if (c) try { c.close(); } catch (e) {}
+    if (p) try { p.destroy(); } catch (e) {}
+  }
+  addEventListener('pagehide', leave);
+  return { host, join, send, leave, on(k, fn) { ev[k] = fn; }, get open() { return !!(conn && conn.open); } };
+})();
+</script>
+<!-- ===== /NET ===== -->
+<!-- ===== BGM：ブラウザの 中で 作る シンセ BGM（音の ファイルは いらない） ===== -->
+<style>
+  .bgm-toggle { position: fixed; right: 12px; bottom: 12px; z-index: 70; font: 800 14px "M PLUS Rounded 1c", "Yu Gothic", sans-serif;
+    color: #f2f5ec; background: #082a1fe6; border: 0; border-radius: 10px; padding: 8px 14px; cursor: pointer; box-shadow: inset 0 0 0 2px #2e6e54; }
+  .bgm-toggle.on { box-shadow: inset 0 0 0 2px #5dff8a; color: #5dff8a; }
+</style>
+<script>
+window.BGM = (() => {
+  const MAJOR = [0, 2, 4, 5, 7, 9, 11], MINOR = [0, 2, 3, 5, 7, 8, 10];
+  // メロディ：1小節＝16こ（16ぶ音符）。数字は 音階の 何番目か、「.」は のばす／休み、「-」は 休み
+  // 8小節で 1回り：前半4小節は しずかな パート（A）、後半4小節で もりあがる（B）
+  const TRACKS = {
+    menu: { bpm: 108, root: 57, scale: MINOR, prog: [0, 5, 2, 6],
+      lead: ['4 . . 2 . . 4 . 6 . 4 . 2 . 0 .', '3 . . 2 . . 0 . 2 . . . - . . .', '2 . . 0 . . 2 . 4 . 2 . 0 . -1 .', '1 . . 0 . . -1 . 1 . . . - . . .'],
+      kick: 'k.......k.......', snare: '....s.......s...', hat: '..h...h...h...h.', bass: 'r..r..r.r..r..o.',
+      arp: [0, 2, 4, 7, 4, 2], leadWave: 'sawtooth', cutoff: 2600, sus: 1 },
+    kairo: { bpm: 92, root: 53, scale: MAJOR, prog: [0, 5, 3, 4],
+      lead: ['4 . . 7 . . 6 . 4 . . . 2 . . .', '5 . . 4 . . 2 . 0 . . . - . . .', '3 . . 5 . . 7 . 8 . 7 . 5 . . .', '6 . . . 4 . . . 1 . 2 . 4 . . .'],
+      kick: 'k.........k.....', snare: '....s.......s...', hat: 'h.h.h.h.h.h.h.hh', bass: 'r.......r...o...',
+      arp: [0, 4, 7, 9, 7, 4], leadWave: 'triangle', cutoff: 1800, sus: 1, lofi: true },
+    supercon: { bpm: 128, root: 57, scale: MINOR, prog: [0, 3, 5, 4],
+      lead: ['0 . 0 2 . 3 . 2 0 . . . 7 . 6 .', '5 . 5 3 . 2 . 0 2 . . . 3 . 4 .', '5 . 7 . 9 . 7 . 5 . 4 . 2 . 4 .', '4 . 2 . 1 . . . 4 . 6 . 7 . . .'],
+      kick: 'k.....k.k.....k.', snare: '....s.......s..s', hat: 'hhhhhhhhhhhhhhhh', bass: 'rrorrrorrrorrror',
+      arp: [0, 2, 4, 2, 7, 4], leadWave: 'sawtooth', cutoff: 3200, sus: 1 },
+    monozukuri: { bpm: 140, root: 55, scale: MAJOR, prog: [0, 4, 5, 3],
+      lead: ['4 . 4 5 . 4 . 2 0 . 2 . 4 . . .', '4 . 4 5 . 7 . 6 4 . . . - . . .', '5 . 5 6 . 5 . 4 2 . 4 . 5 . . .', '3 . 4 . 5 . 7 . 6 . 4 . 2 . . .'],
+      kick: 'k...k...k...k...', snare: '....s.......s...', hat: '..h...h...h...h.', bass: 'r.or.or.r.or.oro',
+      arp: [0, 4, 7, 4, 9, 7], leadWave: 'square', cutoff: 3400, sus: .8 },
+    ball: { bpm: 150, root: 52, scale: MINOR, prog: [0, 5, 2, 6],
+      lead: ['7 . 7 . 9 . 7 . 6 . 4 . 6 7 . .', '4 . 4 . 5 . 4 . 2 . 0 . 2 4 . .', '2 . 2 . 4 . 2 . 4 . 6 . 7 . 9 .', '8 . 7 . 6 . . . 4 . . . 6 . . .'],
+      kick: 'k...k...k...k...', snare: '....s.......s...', hat: '..h...h...h...hh', bass: 'r.rrr.rrr.rrr.ro',
+      arp: [0, 2, 4, 7, 9, 7], leadWave: 'sawtooth', cutoff: 3800, sus: .9 },
+    // 勝利の ファンファーレ（最初から もりあがりっぱなし）
+    victory: { bpm: 132, root: 60, scale: MAJOR, prog: [0, 3, 4, 0], full: true,
+      lead: ['0 . 2 . 4 . 7 . . . 4 . 7 . . .', '5 . . 4 . . 5 . 7 . . . 9 . . .', '9 . 8 . 7 . 4 . 6 . 7 . 8 . . .', '7 . . . 4 . . . 7 . 9 . 11 . . .'],
+      kick: 'k...k...k...k...', snare: '....s.......s.ss', hat: 'h.h.h.h.h.h.h.h.', bass: 'r.or.or.r.or.oro',
+      arp: [0, 4, 7, 11, 7, 4], leadWave: 'sawtooth', cutoff: 4200, sus: .9 },
+    // まけた とき（しずかに）
+    lose: { bpm: 80, root: 57, scale: MINOR, prog: [0, 5, 3, 4],
+      lead: ['4 . . . 2 . . . 0 . . . - . . .', '2 . . . 0 . . . -1 . . . - . . .', '0 . . 2 . . 4 . 2 . . . 0 . . .', '-1 . . . -2 . . . - . . . - . . .'],
+      kick: 'k.........k.....', snare: '............s...', hat: '..h...h...h...h.', bass: 'r.......r.......',
+      arp: [0, 2, 4, 2], leadWave: 'triangle', cutoff: 1600, sus: 1, lofi: true }
+  };
+  const KEY = 'kosen-bgm';
+  let enabled = true;
+  try { enabled = localStorage.getItem(KEY) !== 'off'; } catch (e) {}
+  if (window.DEMO) enabled = false;   // デモ表示は 音なし
+  let ac = null, out = null, music = null, duckBus = null, delaySend = null, verbSend = null, noiseBuf = null;
+  let blipT = 0;
+  let track = null, rate = 1, timer = 0, step = 0, nextTime = 0, wanted = null;
+
+  function init() {
+    if (ac) return true;
+    try {
+      ac = new (window.AudioContext || window.webkitAudioContext)();
+      const comp = ac.createDynamicsCompressor(); comp.threshold.value = -16; comp.ratio.value = 4;
+      out = ac.createGain(); out.gain.value = 0; out.connect(comp).connect(ac.destination);
+      music = ac.createGain(); music.gain.value = 1; music.connect(out);
+      duckBus = ac.createGain(); duckBus.connect(music);                         // キックに あわせて うねる（サイドチェイン）
+      // エコー（付点8ぶの ディレイ）
+      const dl = ac.createDelay(1), fb = ac.createGain(), dlf = ac.createBiquadFilter();
+      dlf.type = 'lowpass'; dlf.frequency.value = 2600; fb.gain.value = .35;
+      delaySend = ac.createGain(); delaySend.connect(dl); dl.connect(dlf).connect(fb).connect(dl); dlf.connect(music);
+      delaySend._node = dl;
+      // ひびき（リバーブ）
+      const cv = ac.createConvolver(), len = ac.sampleRate * 2.2, ir = ac.createBuffer(2, len, ac.sampleRate);
+      for (let c = 0; c < 2; c++) { const d = ir.getChannelData(c); for (let k = 0; k < len; k++) d[k] = (Math.random() * 2 - 1) * Math.pow(1 - k / len, 3); }
+      cv.buffer = ir; verbSend = ac.createGain(); verbSend.gain.value = .5; verbSend.connect(cv).connect(music);
+      noiseBuf = ac.createBuffer(1, ac.sampleRate, ac.sampleRate);
+      const nd = noiseBuf.getChannelData(0); for (let k = 0; k < nd.length; k++) nd[k] = Math.random() * 2 - 1;
+      return true;
+    } catch (e) { ac = null; return false; }
+  }
+  const hz = m => 440 * Math.pow(2, (m - 69) / 12);
+  const deg = (t, d) => { const n = t.scale.length, o = Math.floor(d / n); return t.scale[((d % n) + n) % n] + 12 * o; };
+  const parse = s => s.split(' ').map(x => x === '.' ? '.' : x === '-' ? '-' : +x);
+
+  // ---- 楽器 ----
+  function synth({ midi, t0, dur, waves = ['sawtooth'], detune = 0, vol = .1, cutoff = 3000, env = 0, q = 1, attack = .01, release = .12, dest, delay = 0, verb = 0 }) {
+    const g = ac.createGain(), f = ac.createBiquadFilter();
+    f.type = 'lowpass'; f.Q.value = q;
+    f.frequency.setValueAtTime(cutoff + env, t0); f.frequency.exponentialRampToValueAtTime(Math.max(120, cutoff), t0 + Math.min(dur, .25));
+    g.gain.setValueAtTime(0, t0); g.gain.linearRampToValueAtTime(vol, t0 + attack);
+    g.gain.setValueAtTime(vol, t0 + Math.max(attack, dur - release)); g.gain.linearRampToValueAtTime(0, t0 + dur + release);
+    f.connect(g).connect(dest || music);
+    if (delay) { const s = ac.createGain(); s.gain.value = delay; g.connect(s).connect(delaySend); }
+    if (verb) { const s = ac.createGain(); s.gain.value = verb; g.connect(s).connect(verbSend); }
+    waves.forEach((w, k) => {
+      const o = ac.createOscillator(); o.type = w; o.frequency.value = hz(midi);
+      o.detune.value = waves.length > 1 ? (k - (waves.length - 1) / 2) * detune : 0;
+      o.connect(f); o.start(t0); o.stop(t0 + dur + release + .05);
+    });
+  }
+  function noise(t0, dur, { type = 'highpass', freq = 8000, vol = .1, q = 1, dest, sweep } = {}) {
+    const s = ac.createBufferSource(), f = ac.createBiquadFilter(), g = ac.createGain();
+    s.buffer = noiseBuf; f.type = type; f.frequency.setValueAtTime(freq, t0); f.Q.value = q;
+    if (sweep) f.frequency.exponentialRampToValueAtTime(sweep, t0 + dur);
+    g.gain.setValueAtTime(vol, t0); g.gain.exponentialRampToValueAtTime(.001, t0 + dur);
+    s.connect(f).connect(g).connect(dest || music); s.start(t0); s.stop(t0 + dur + .02);
+    return g;
+  }
+  function kick(t0) {
+    const o = ac.createOscillator(), g = ac.createGain();
+    o.frequency.setValueAtTime(170, t0); o.frequency.exponentialRampToValueAtTime(42, t0 + .13);
+    g.gain.setValueAtTime(.9, t0); g.gain.exponentialRampToValueAtTime(.001, t0 + .32);
+    o.connect(g).connect(music); o.start(t0); o.stop(t0 + .35);
+    noise(t0, .012, { type: 'highpass', freq: 3000, vol: .25 });          // カチッと した アタック
+    // サイドチェイン：パッドと ベースを キックの しゅんかん へこませる
+    duckBus.gain.cancelScheduledValues(t0); duckBus.gain.setValueAtTime(.25, t0); duckBus.gain.linearRampToValueAtTime(1, t0 + .2);
+  }
+  function snare(t0, vol = 1) {
+    noise(t0, .18, { type: 'bandpass', freq: 1900, vol: .42 * vol, q: .8 });
+    noise(t0, .09, { type: 'highpass', freq: 5000, vol: .18 * vol });
+    const o = ac.createOscillator(), g = ac.createGain(); o.type = 'triangle';
+    o.frequency.setValueAtTime(230, t0); o.frequency.exponentialRampToValueAtTime(140, t0 + .08);
+    g.gain.setValueAtTime(.28 * vol, t0); g.gain.exponentialRampToValueAtTime(.001, t0 + .1);
+    o.connect(g).connect(music); o.start(t0); o.stop(t0 + .12);
+    const s = ac.createGain(); s.gain.value = .25; noise(t0, .2, { type: 'bandpass', freq: 1500, vol: .3 * vol, dest: s }); s.connect(verbSend);
+  }
+  const hat = (t0, open) => noise(t0, open ? .22 : .035, { type: 'highpass', freq: open ? 7000 : 9000, vol: open ? .09 : .07 });
+  const crash = t0 => { noise(t0, 1.6, { type: 'highpass', freq: 5000, vol: .16 }); const s = ac.createGain(); s.gain.value = .5; noise(t0, 1.2, { type: 'highpass', freq: 4000, vol: .12, dest: s }); s.connect(verbSend); };
+  const riser = (t0, dur) => noise(t0, dur, { type: 'bandpass', freq: 400, sweep: 9000, vol: .12, q: 2 });
+
+  function schedule() {
+    const t = track; if (!t) return;
+    const sd = 60 / (t.bpm * rate) / 4;                  // 16ぶ音符の 長さ
+    delaySend._node.delayTime.setTargetAtTime(sd * 3, ac.currentTime, .05);   // 付点8ぶ
+    while (nextTime < ac.currentTime + .2) {
+      const bar = Math.floor(step / 16) % 8, s = step % 16, partB = t.full || bar >= 4;
+      const chord = t.prog[bar % 4], tm = nextTime;
+      // パッド（コード）：小節の あたまで のばす
+      if (s === 0) {
+        [0, 2, 4].forEach(k => synth({ midi: t.root + deg(t, chord + k), t0: tm, dur: sd * 15.5, waves: ['sawtooth', 'sawtooth', 'sawtooth'], detune: 14, vol: partB ? .03 : .035, cutoff: partB ? 1600 : 900, attack: .25, release: .4, dest: duckBus, verb: .5 }));
+        if (bar === 0 || bar === 4) crash(tm);
+        if (bar === 3 && !t.full) riser(tm, sd * 16);
+      }
+      // アルペジオ（キラキラ）
+      if (s % 2 === 0 || partB) {
+        const a = t.arp[(step >> (partB ? 0 : 1)) % t.arp.length];
+        synth({ midi: t.root + 12 + deg(t, chord + a), t0: tm, dur: sd * .8, waves: ['square'], vol: partB ? .022 : .03, cutoff: 1500, env: 2500, q: 4, release: .05, delay: .45, verb: .15 });
+      }
+      // ベース
+      const b = t.bass[s];
+      if (b !== '.') synth({ midi: t.root - 24 + deg(t, chord) + (b === 'o' ? 12 : 0), t0: tm, dur: sd * .9, waves: ['sawtooth', 'sine'], vol: .2, cutoff: 260, env: t.lofi ? 300 : 1200, q: 6, release: .05, dest: duckBus });
+      // メロディ（B パートだけ。A パートは 1オクターブ下で うすく）
+      const line = (t._lead = t._lead || t.lead.map(parse))[bar % 4];
+      const v = line[s];
+      if (typeof v === 'number') {
+        let len = 1; while (s + len < 16 && line[s + len] === '.') len++;
+        const midi = t.root + 12 + deg(t, v) - (partB ? 0 : 12);
+        synth({ midi, t0: tm, dur: sd * len * t.sus, waves: [t.leadWave, t.leadWave], detune: t.leadWave === 'sawtooth' ? 10 : 6, vol: partB ? .075 : .04,
+          cutoff: t.cutoff * (partB ? 1 : .5), env: 1800, q: 2, attack: .01, release: .1, delay: partB ? .3 : .15, verb: .25 });
+        if (partB) synth({ midi: midi + 12, t0: tm, dur: sd * len * t.sus, waves: ['triangle'], vol: .018, cutoff: 5000, release: .1, delay: .2 });
+      }
+      // ドラム（A パートは かるめ）
+      if (t.kick[s] === 'k' && (partB || s === 0 || s === 8)) kick(tm);
+      if (t.snare[s] === 's' && (partB || s === 12)) snare(tm, partB ? 1 : .6);
+      if (t.hat[s] === 'h') hat(tm, partB && s === 14);
+      if (bar === 7 && s >= 12) snare(tm, .4 + (s - 12) * .15);   // 最後の 小節は スネアの ロール
+      nextTime += sd; step++;
+    }
+  }
+  function fade(to, sec = .5) { if (!out) return; const n = ac.currentTime; out.gain.cancelScheduledValues(n); out.gain.setValueAtTime(out.gain.value, n); out.gain.linearRampToValueAtTime(to, n + sec); }
+  function start() {
+    if (!wanted || !enabled || !init()) return;
+    if (ac.state === 'suspended') ac.resume();
+    if (track === TRACKS[wanted] && timer) return;
+    track = TRACKS[wanted]; step = 0; nextTime = ac.currentTime + .1;
+    clearInterval(timer); timer = setInterval(schedule, 25);
+    fade(.55, .8);
+  }
+  function stop() { clearInterval(timer); timer = 0; fade(0, .3); }
+  // ブラウザは 最初の タッチまで 音を 出せないので、最初の そうさで スタート
+  ['pointerdown', 'keydown', 'touchstart'].forEach(ev => addEventListener(ev, () => start(), { capture: true, passive: true }));
+  document.addEventListener('visibilitychange', () => { if (document.hidden) stop(); else start(); });
+
+  const toggles = new Set();
+  function syncToggles() { toggles.forEach(b => { b.textContent = `♪ BGM：${enabled ? 'ON' : 'OFF'}`; b.classList.toggle('on', enabled); }); }
+  function setEnabled(on) {
+    enabled = !!on;
+    if (window.DEMO) return;
+    try { localStorage.setItem(KEY, enabled ? 'on' : 'off'); } catch (e) {}
+    if (enabled) start(); else stop();
+    syncToggles();
+  }
+  function mountToggle(where, floating = !where) {
+    const b = document.createElement('button');
+    b.type = 'button'; b.className = floating ? 'bgm-toggle' : (where.dataset.bgmClass || 'btn ghost small');
+    b.addEventListener('click', e => { e.stopPropagation(); setEnabled(!enabled); });
+    b.addEventListener('pointerdown', e => e.stopPropagation());
+    (floating ? document.body : where).appendChild(b);
+    toggles.add(b); syncToggles();
+    return b;
+  }
+  return {
+    get track() { return wanted; },
+    play(name) { wanted = name; if (ac && ac.state !== 'closed') start(); },
+    stop, setEnabled, get enabled() { return enabled; }, mountToggle,
+    setTempo(r) { rate = r; },
+    duck(on) { fade(on ? .2 : .55, .2); },
+    // 効果音が 聞こえる ように、すこしの あいだ BGM を 小さく する
+    blip(ms = 500) { if (!out || !timer) return; fade(.12, .05); clearTimeout(blipT); blipT = setTimeout(() => { if (timer) fade(.55, .35); }, ms); }
+  };
+})();
+</script>
+<!-- ===== /BGM ===== -->
+<script>if (location.hash !== '#p2') BGM.play('supercon');</script>
+
+<script>
+(() => {
+  const ART = {
+    super: `<svg viewBox="0 0 100 100" aria-hidden="true">
+      <rect x="14" y="14" width="34" height="74" rx="4" fill="#2c3848" stroke="#131a24" stroke-width="3"/>
+      <rect x="52" y="14" width="34" height="74" rx="4" fill="#2c3848" stroke="#131a24" stroke-width="3"/>
+      <g fill="#46566b">
+        <rect x="19" y="21" width="24" height="9" rx="1.5"/><rect x="19" y="34" width="24" height="9" rx="1.5"/>
+        <rect x="19" y="47" width="24" height="9" rx="1.5"/><rect x="19" y="60" width="24" height="9" rx="1.5"/>
+        <rect x="57" y="21" width="24" height="9" rx="1.5"/><rect x="57" y="34" width="24" height="9" rx="1.5"/>
+        <rect x="57" y="47" width="24" height="9" rx="1.5"/><rect x="57" y="60" width="24" height="9" rx="1.5"/>
+      </g>
+      <g fill="#5dff8a"><circle cx="38" cy="25.5" r="2"/><circle cx="38" cy="51.5" r="2"/><circle cx="76" cy="38.5" r="2"/><circle cx="76" cy="64.5" r="2"/></g>
+      <g fill="#3fb4ff"><circle cx="38" cy="38.5" r="2"/><circle cx="76" cy="25.5" r="2"/><circle cx="76" cy="51.5" r="2"/></g>
+      <g fill="#ffb03f"><circle cx="38" cy="64.5" r="2"/></g>
+      <rect x="19" y="75" width="24" height="7" rx="1.5" fill="#131a24"/><rect x="57" y="75" width="24" height="7" rx="1.5" fill="#131a24"/>
+    </svg>`,
+    robot: `<svg viewBox="0 0 100 100" aria-hidden="true">
+      <line x1="50" y1="12" x2="50" y2="25" stroke="#3a4552" stroke-width="3"/>
+      <circle cx="50" cy="11" r="5.5" fill="#ff5a4f" stroke="#3a4552" stroke-width="2.5"/>
+      <rect x="18" y="37" width="9" height="15" rx="3" fill="#e0801a" stroke="#3a4552" stroke-width="2.5"/>
+      <rect x="73" y="37" width="9" height="15" rx="3" fill="#e0801a" stroke="#3a4552" stroke-width="2.5"/>
+      <rect x="26" y="25" width="48" height="38" rx="8" fill="#d4dce3" stroke="#3a4552" stroke-width="3"/>
+      <circle cx="40" cy="42" r="6.5" fill="#3fd0ff" stroke="#3a4552" stroke-width="2.5"/>
+      <circle cx="60" cy="42" r="6.5" fill="#3fd0ff" stroke="#3a4552" stroke-width="2.5"/>
+      <circle cx="41.5" cy="40.5" r="2" fill="#fff"/><circle cx="61.5" cy="40.5" r="2" fill="#fff"/>
+      <rect x="38" y="52" width="24" height="6" rx="1.5" fill="#3a4552"/>
+      <g stroke="#d4dce3" stroke-width="1.5"><path d="M44 52 V58"/><path d="M50 52 V58"/><path d="M56 52 V58"/></g>
+      <rect x="30" y="67" width="40" height="30" rx="5" fill="#e0801a" stroke="#3a4552" stroke-width="3"/>
+      <rect x="38" y="73" width="24" height="10" rx="2" fill="#1f2a26"/>
+      <circle cx="43" cy="78" r="2" fill="#5dff8a"/><circle cx="50" cy="78" r="2" fill="#ffb03f"/><circle cx="57" cy="78" r="2" fill="#ff5a4f"/>
+    </svg>`,
+    bug: `<svg viewBox="0 0 100 100" aria-hidden="true">
+      <g stroke="#3b1f33" stroke-width="3.5" stroke-linecap="round" fill="none">
+        <path d="M32 50 L16 42"/><path d="M30 62 L13 63"/><path d="M33 74 L18 84"/>
+        <path d="M68 50 L84 42"/><path d="M70 62 L87 63"/><path d="M67 74 L82 84"/>
+        <path d="M44 26 Q38 12 28 12"/><path d="M56 26 Q62 12 72 12"/>
+      </g>
+      <circle cx="28" cy="12" r="3.5" fill="#3b1f33"/><circle cx="72" cy="12" r="3.5" fill="#3b1f33"/>
+      <ellipse cx="50" cy="63" rx="21" ry="26" fill="#c2338a" stroke="#3b1f33" stroke-width="3"/>
+      <path d="M50 38 V89" stroke="#3b1f33" stroke-width="2.5"/>
+      <circle cx="40" cy="58" r="4" fill="#3b1f33"/><circle cx="60" cy="66" r="4" fill="#3b1f33"/><circle cx="41" cy="76" r="3.5" fill="#3b1f33"/><circle cx="60" cy="52" r="3" fill="#3b1f33"/>
+      <circle cx="50" cy="33" r="13" fill="#3b1f33"/>
+      <circle cx="44.5" cy="32" r="4.5" fill="#fff"/><circle cx="55.5" cy="32" r="4.5" fill="#fff"/>
+      <circle cx="45.5" cy="33" r="2" fill="#3b1f33"/><circle cx="56.5" cy="33" r="2" fill="#3b1f33"/>
+      <path d="M40 26 L48 29" stroke="#fff" stroke-width="2" stroke-linecap="round"/><path d="M60 26 L52 29" stroke="#fff" stroke-width="2" stroke-linecap="round"/>
+      <path d="M45 40 Q50 37 55 40" stroke="#fff" stroke-width="2" fill="none" stroke-linecap="round"/>
+    </svg>`
+  };
+  const NAME = { super: 'スパコン', robot: 'ロボット', bug: 'バグ' };
+  const RULE = { super: 'ロボットに 勝つ', robot: 'バグに 勝つ', bug: 'スパコンに 勝つ' };
+  const WHY = { super: 'プログラムで 動かす', robot: '見つけて なおす', bug: 'フリーズさせる' };
+  const TEAM = { super: 'スパコンチーム', bug: 'バグチーム' };
+  const BEATS = { super: 'robot', robot: 'bug', bug: 'super' };
+  const POINTS = { super: 1, bug: 4 };
+  const FLAVOR = {
+    super: 'スパコンが ロボットに プログラムを おくった！',
+    robot: 'ロボットが バグを 見つけて なおした！',
+    bug: 'バグが スパコンを フリーズさせた！'
+  };
+  const TOTAL = 6;
+  const P = ['p1', 'p2'];
+
+  const $ = id => document.getElementById(id);
+  const IS_SUB = location.hash === '#p2';   // 2画面モードの プレイヤー2用ウィンドウ
+  const wait = ms => new Promise(r => setTimeout(r, ms));
+  const otherSide = side => side === 'super' ? 'bug' : 'super';
+  const opp = p => p === 'p1' ? 'p2' : 'p1';
+  const cap = p => p === 'p1' ? 'P1' : 'P2';
+  const judge = (a, b) => a === b ? 0 : (BEATS[a] === b ? 1 : -1);
+  const esc = s => s.replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+
+  function cardHTML(type, tag = 'div', extra = '') {
+    return `<${tag} class="card face ${type}" ${extra}>
+      <span class="name">${NAME[type]}</span>${ART[type]}<span class="rule">${RULE[type]}</span>
+    </${tag}>`;
+  }
+
+  // ---------- 音（電子音） ----------
+  let soundOn = BGM.enabled, actx = null;   // 「おと」ボタンで こうかおんと BGM を いっしょに ON/OFF
+  function sfx(kind) {
+    if (!soundOn || IS_SUB) return;   // 2画面モードでは 音は メインの画面だけ
+    try {
+      actx = actx || new (window.AudioContext || window.webkitAudioContext)();
+      const seq = {
+        pick: [[880, .05]], tick: [[660, .07]], flip: [[440, .05], [880, .08]],
+        draw: [[523, .1], [523, .12]],
+        win: [[523, .09], [659, .09], [784, .09], [1047, .22]],
+        lose: [[392, .16], [196, .3]]
+      }[kind];
+      if (actx.state === 'suspended') actx.resume();
+      BGM.blip(Math.max(250, seq.reduce((a, [, d]) => a + d, 0) * 1000 + 150));   // 効果音の あいだ BGM を 小さく
+      let t = actx.currentTime;
+      seq.forEach(([f, d]) => {
+        const o = actx.createOscillator(), g = actx.createGain();
+        o.type = 'square'; o.frequency.value = f;
+        g.gain.setValueAtTime(.2, t); g.gain.exponentialRampToValueAtTime(.001, t + d);
+        o.connect(g).connect(actx.destination); o.start(t); o.stop(t + d + .02);
+        t += d * .9;
+      });
+    } catch (e) {}
+  }
+
+  // ---------- タイトル ----------
+  $('titleCards').innerHTML = ['super', 'robot', 'bug'].map(t => cardHTML(t)).join('');
+  const mini = t => `<div class="card face ${t}">${ART[t]}</div>`;
+  $('chain').innerHTML = [['super', 'robot'], ['robot', 'bug'], ['bug', 'super']]
+    .map(([a, b]) => `<div class="chain-row">${mini(a)}<span>${NAME[a]} は</span>${mini(b)}<span>${NAME[b]} に</span><span class="arrow">かつ！</span><span class="why">（${WHY[a]}）</span></div>`).join('');
+
+  let mode = 'cpu';
+  try { if (localStorage.getItem('ousama-mode') === '2p') mode = '2p'; } catch (e) {}
+  try {
+    $('p1Name').value = localStorage.getItem('ousama-p1') || '';
+    $('p2Name').value = localStorage.getItem('ousama-p2') || '';
+  } catch (e) {}
+  function setMode(m) {
+    if (mode === 'online' && m !== 'online') netLeave();
+    mode = m;
+    $('modeCpu').setAttribute('aria-pressed', m === 'cpu');
+    $('mode2p').setAttribute('aria-pressed', m === '2p');
+    $('modeNet').setAttribute('aria-pressed', m === 'online');
+    $('namesBox').hidden = m !== '2p';
+    $('twinBox').hidden = m !== '2p';
+    $('netBox').hidden = m !== 'online';
+    if (m !== 'online') try { localStorage.setItem('ousama-mode', m); } catch (e) {}
+    renderNet();
+  }
+  $('modeCpu').onclick = () => setMode('cpu');
+  $('mode2p').onclick = () => setMode('2p');
+  $('modeNet').onclick = () => setMode('online');
+
+  // ---------- 2画面モード（1台のPCで ウィンドウを2つ ひらいて 同期する） ----------
+  // メインの画面＝プレイヤー1用、#p2 で ひらいた画面＝プレイヤー2用。
+  // ゲームの すすみかたは 両方の画面で 同じように けいさんし、操作（アクション）だけを おくりあう。
+  let view = IS_SUB ? 'p2' : 'both';   // 'both'＝1画面で 二人、'p1' / 'p2'＝その人 専用の画面
+  let linked = false;
+  let net = null;   // 通信対戦で つながって いる あいだ：'host'（へやを つくった人＝P1）／'guest'（さんかした人＝P2）
+  const curView = () => net ? (net === 'host' ? 'p1' : 'p2') : IS_SUB ? 'p2' : linked ? 'p1' : 'both';
+  const SYNC = 'supercon-sync';
+  const winId = Math.random().toString(36).slice(2);
+  const seen = new Set();
+  let bc = null;
+  try { bc = new BroadcastChannel(SYNC); bc.onmessage = e => receive(e.data); } catch (e) {}
+  // BroadcastChannel が つかえない ブラウザ用の よびみち
+  window.addEventListener('storage', e => {
+    if (e.key !== SYNC || !e.newValue) return;
+    try { receive(JSON.parse(e.newValue)); } catch (err) {}
+  });
+  function send(m) {
+    m.id = winId + Math.random().toString(36).slice(2);
+    m.from = winId;
+    try { if (bc) bc.postMessage(m); } catch (e) {}
+    try { localStorage.setItem(SYNC, JSON.stringify(m)); } catch (e) {}
+  }
+  function receive(m) {
+    if (!m || m.from === winId || seen.has(m.id)) return;
+    seen.add(m.id);
+    if (m.t === 'hello' || m.t === 'beat' || m.t === 'bye') return onLink(m);
+    if (!net) apply(m);   // 通信対戦ちゅうは 2画面モードの 操作を うけとらない
+  }
+  let lastBeat = 0;
+  function onLink(m) {
+    if (m.sub === IS_SUB) return;   // 同じ役の ウィンドウどうしは むし
+    if (m.t === 'bye') return setLinked(false);
+    lastBeat = Date.now();
+    if (!linked) setLinked(true);
+    if (m.t === 'hello' && !m.reply) send({ t: 'hello', sub: IS_SUB, reply: true });
+  }
+  // とじた合図（bye）が とどかない ことも あるので、2秒ごとに 合図を おくりあう
+  setInterval(() => {
+    send({ t: 'beat', sub: IS_SUB });
+    if (linked && Date.now() - lastBeat > 10000) setLinked(false);
+  }, 2000);
+  function setLinked(on) {
+    linked = on;
+    view = curView();
+    renderLink();
+    if (S) { applyView(); render(); fitScreen(); }
+  }
+  function renderLink() {
+    const el = IS_SUB ? $('subStatus') : $('twinStatus');
+    el.classList.toggle('ok', linked);
+    el.innerHTML = IS_SUB
+      ? (linked ? '<span class="led on"></span>つながったよ！ スタートを まってね'
+                : 'プレイヤー1の 画面が 見つからないよ。そちらで「プレイヤー2の 画面を ひらく」を おしてね')
+      : (linked ? '<span class="led on"></span>プレイヤー2の 画面と つながったよ！ 2まいめの モニターに 動かしてね'
+                : 'モニターが 2まい あるときに つかえるよ');
+  }
+
+  // 操作は act() を 通す：自分の画面で 実行して、もう一方の画面にも おくる
+  function act(a) {
+    apply(a);
+    if (net) NET.send(a);
+    else if (linked) send(a);
+  }
+
+  // ---------- 通信対戦（インターネットで 2台を つなぐ） ----------
+  // しくみは 2画面モードと 同じ：ゲームは 両方の 画面で けいさんして、操作だけを おくりあう
+  let netWant = null, netCode = '', netPeerName = '', netNote = '', netBad = false;
+  const myNetName = () => $('netName').value.trim();
+  try { $('netName').value = localStorage.getItem('ousama-net') || ''; } catch (e) {}
+  $('netName').addEventListener('change', () => {
+    try { localStorage.setItem('ousama-net', myNetName()); } catch (e) {}
+    if (net) NET.send({ t: 'net-hello', name: myNetName() });
+  });
+  function netStart(role) {
+    netWant = role; netCode = ''; netPeerName = ''; netBad = false;
+    netNote = role === 'host' ? 'へやを つくって いるよ…' : 'さがして いるよ…';
+    renderNet();
+    if (role === 'host') NET.host('supercon');
+    else NET.join('supercon', $('netCode').value.replace(/\D/g, ''));
+  }
+  function netLeave() {
+    NET.leave();
+    const was = net;
+    net = null; netWant = null; netCode = ''; netPeerName = ''; netNote = ''; netBad = false;
+    if (was) { view = curView(); if (S) goTitle(); }
+    renderNet();
+  }
+  NET.on('code', code => { netCode = code; netNote = 'この ばんごうを 相手に 教えてね。相手が さんかするのを まってるよ…'; renderNet(); });
+  NET.on('open', () => {
+    net = netWant; view = curView(); netBad = false;
+    netNote = net === 'host' ? 'つながったよ！「スタート」を おしてね' : 'つながったよ！ 相手が スタートを おすのを まってね';
+    NET.send({ t: 'net-hello', name: myNetName() });
+    renderNet();
+  });
+  NET.on('data', m => {
+    if (m.t === 'net-hello') { netPeerName = String(m.name || '').slice(0, 8); return renderNet(); }
+    apply(m);
+  });
+  NET.on('close', () => {
+    net = null; netPeerName = ''; view = curView();
+    if (S) goTitle();
+    netBad = true;
+    netNote = netWant === 'host' && netCode ? '相手との 通信が きれたよ。同じ ばんごうで もう一度 さんか できるよ' : '相手との 通信が きれたよ';
+    if (netWant === 'guest') netWant = null;
+    renderNet();
+  });
+  NET.on('error', type => {
+    netBad = true;
+    netNote = {
+      'lib': 'インターネットに つながって いないみたい',
+      'peer-unavailable': 'その ばんごうの へやが 見つからないよ。ばんごうを たしかめてね',
+      'timeout': 'つながらなかったよ。学校などの ネットワークでは つながらない ことが あるよ',
+      'unavailable-id': 'へやを つくれなかったよ。もう一度 ためしてね'
+    }[type] || 'つながらなかったよ。もう一度 ためしてね';
+    if (!net) { NET.leave(); netWant = null; netCode = ''; }
+    renderNet();
+  });
+  function renderNet() {
+    const busy = !!netWant;
+    $('netPick').hidden = busy;
+    $('netCodeShow').hidden = !(netWant === 'host' && netCode);
+    $('netCodeShow').innerHTML = `へやの ばんごう<b>${netCode}</b>`;
+    $('netLeaveBtn').hidden = !busy;
+    const st = $('netStatus');
+    st.className = 'twin-status' + (net ? ' ok' : netBad ? ' bad' : '');
+    st.innerHTML = (net ? '<span class="led on"></span>' : '') + esc(netNote) + (net && netPeerName ? `（相手：${esc(netPeerName)}）` : '');
+    st.hidden = !netNote;
+    const online = mode === 'online';
+    $('startBtn').hidden = online && net === 'guest';
+    $('startBtn').disabled = online && net !== 'host';
+  }
+  $('netHostBtn').onclick = () => netStart('host');
+  $('netJoinBtn').onclick = () => {
+    if ($('netCode').value.replace(/\D/g, '').length !== 4) { netBad = true; netNote = '4けたの ばんごうを 入れてね'; return renderNet(); }
+    netStart('guest');
+  };
+  $('netCode').addEventListener('keydown', e => { if (e.key === 'Enter') $('netJoinBtn').click(); });
+  $('netLeaveBtn').onclick = netLeave;
+  // ?room=1234 つきの リンクで ひらいたら、通信対戦の さんか画面に する
+  const roomQ = (new URLSearchParams(location.search).get('room') || '').replace(/\D/g, '').slice(0, 4);
+  if (roomQ && !IS_SUB) { mode = 'online'; $('netCode').value = roomQ; }
+  setMode(mode);
+  function apply(a) {
+    if (a.t === 'start') {
+      if (IS_SUB && a.mode !== '2p') return;
+      return newGame(a.mode, a.raw);
+    }
+    if (a.t === 'title') return goTitle();
+    if (!S) return;
+    if (a.t === 'pick') {
+      // 画面ごとに アニメーションの おわる タイミングが 少し ずれるので、早く とどいた 操作は とっておく
+      if (a.round !== S.round || a.turn !== S.turn || S.busy) {
+        if (a.round > S.round || (a.round === S.round && a.turn >= S.turn)) S.queue.push(a);
+        return;
+      }
+      return choose(a.p, a.card);
+    }
+    if (a.t === 'next') {
+      if (a.round !== S.round) return;
+      if (!S.ended) { S.pendingNext = true; return; }
+      return nextRound();
+    }
+    if (a.t === 'again') return newGame(S.mode, S.raw);
+  }
+  function flushQueue() {
+    const q = S.queue;
+    S.queue = [];
+    q.forEach(apply);
+  }
+  const pick = (p, card) => act({ t: 'pick', p, card, round: S.round, turn: S.turn });
+
+  // ---------- ゲーム ----------
+  let S = null;
+
+  function newGame(m, raw) {
+    FX.stopVictory(); if (!IS_SUB) BGM.play('supercon');
+    const names = m === '2p'
+      ? { p1: esc(raw.p1 || 'プレイヤー1'), p2: esc(raw.p2 || 'プレイヤー2') }
+      : { p1: 'あなた', p2: 'コンピューター' };
+    S = {
+      mode: m, raw, names, round: 1,
+      score: { p1: 0, p2: 0 },
+      memo: { super: [0, 0, 0, 0, 0], bug: [0, 0, 0, 0, 0] },
+      queue: []
+    };
+    $('title').hidden = true; $('waitSub').hidden = true; $('roundEnd').hidden = true;
+    $('game').hidden = false;
+    applyView();
+    startRound();
+    fitScreen();
+  }
+
+  function applyView() {
+    const two = S.mode === '2p' && view !== 'both';
+    const board = document.querySelector('.board');
+    board.classList.toggle('duo', S.mode === '2p' && view === 'both');
+    document.body.classList.toggle('duo-mode', S.mode === '2p' && view === 'both');
+    board.classList.toggle('view-p2', two && view === 'p2');
+    board.classList.toggle('solo', two);
+    $('handP2').classList.toggle('small', S.mode === 'cpu' || (two && view === 'p1'));
+    $('handP1').classList.toggle('small', two && view === 'p2');
+  }
+
+  // スクロールしなくても 手札が 見えるように、画面の高さに あわせて ちぢめる
+  function fitScreen() {
+    const g = $('game');
+    g.style.zoom = '';
+    if (!S) return;
+    const gh = g.offsetHeight;
+    const rest = document.documentElement.scrollHeight - gh;
+    const z = Math.min(1, (innerHeight - rest - 4) / gh);
+    if (z < 1) g.style.zoom = Math.max(z, .5).toFixed(3);
+  }
+
+  function startRound() {
+    S.side = { p1: S.round % 2 === 1 ? 'super' : 'bug' };
+    S.side.p2 = otherSide(S.side.p1);
+    S.hand = {
+      p1: ['robot', 'robot', S.side.p1, 'robot', 'robot'],
+      p2: ['robot', 'robot', S.side.p2, 'robot', 'robot']
+    };
+    S.turn = 1; S.log = [];
+    S.ended = false; S.pendingNext = false;
+    BGM.setTempo(S.round === TOTAL ? 1.12 : 1);   // 最後の ラウンドは BGM が はやく なる
+    beginTurn();
+    if (!IS_SUB) FX.banner(`ROUND ${S.round}`, S.round === TOTAL ? '最後の ラウンド！' : '', { color: S.round === TOTAL ? '#ff6b5e' : '#2f7fd1', dur: 1.1, height: Math.min(120, innerHeight * .15) });
+    msg(`ROUND ${S.round}`, S.mode === 'cpu'
+      ? `あなたは <b>${TEAM[S.side.p1]}</b>。カードを1まい 選んでね`
+      : `${S.names.p1}は <b>${TEAM[S.side.p1]}</b>、${S.names.p2}は <b>${TEAM[S.side.p2]}</b>。<br>二人とも こっそり 選んでね`);
+    flushQueue();
+  }
+
+  function nextRound() {
+    S.ended = false; S.pendingNext = false;
+    if (S.round >= TOTAL) return showFinal();
+    $('roundEnd').hidden = true;
+    S.round++;
+    startRound();
+  }
+
+  function beginTurn() {
+    S.pick = { p1: null, p2: null };
+    // 二人モードは 切り札の 場所を 毎回 かえて、指の 位置から ばれにくく する
+    if (S.mode === '2p') for (const p of P) S.hand[p].sort(() => Math.random() - .5);
+    S.busy = false;
+    resetSlot($('slotP1')); resetSlot($('slotP2'));
+    render();
+  }
+
+  // コンピューターは あなたが切り札（スパコン／バグ）を出したタイミングを おぼえて よみあいする
+  function cpuChoose() {
+    const cpuSide = S.side.p2;
+    const hand = S.hand.p2;
+    const hasSpecial = hand.includes(cpuSide);
+    const robots = hand.filter(c => c === 'robot').length;
+    if (!hasSpecial) return 'robot';
+    if (robots === 0) return cpuSide;
+    const hist = S.memo[S.side.p1];
+    const w = [];
+    for (let k = S.turn; k <= 5; k++) w.push(hist[k - 1] + 1);
+    const weights = cpuSide === 'bug' ? w : w.map(x => 1 / x);
+    const sum = weights.reduce((a, b) => a + b, 0);
+    const p = .7 * (weights[0] / sum) + .3 * (1 / weights.length);
+    return Math.random() < p ? cpuSide : 'robot';
+  }
+
+  // 手札から ぬくのは オープンの とき（二人モードで 手札の へりかたから ばれないように）
+  function take(p, card) {
+    S.pick[p] = card;
+    placeSlot($('slot' + cap(p)), card);
+  }
+
+  function choose(p, card) {
+    if (!S || S.busy || S.pick[p]) return;
+    if (S.mode === 'cpu' && p !== 'p1') return;
+    if (!S.hand[p].includes(card)) return;
+    sfx('pick');
+    if (S.mode === 'cpu') {
+      if (card !== 'robot') S.memo[S.side.p1][S.turn - 1]++;
+      take('p1', card);
+      take('p2', cpuChoose());
+      return reveal();
+    }
+    take(p, card);
+    if (S.pick[opp(p)]) return reveal();
+    render();
+    msg(`${S.names[p]} は 選んだ！`, `${S.names[opp(p)]} も 選んでね`);
+  }
+
+  async function reveal() {
+    const g = S;
+    S.busy = true;
+    for (const p of P) S.hand[p].splice(S.hand[p].indexOf(S.pick[p]), 1);
+    render();
+    for (const n of ['3', '2', '1']) {
+      msg(n, '', 'count'); sfx('tick');
+      ['slotP1', 'slotP2'].forEach(id => { const el = $(id); el.classList.remove('tick'); void el.offsetWidth; el.classList.add('tick'); });
+      await wait(380);
+      if (S !== g) return;
+    }
+    msg('オープン！', '');
+    sfx('flip');
+    $('slotP1').classList.add('open'); $('slotP2').classList.add('open');
+    // カードが ぶつかる 火花
+    const c1 = FX.center($('slotP1')), c2 = FX.center($('slotP2')), mid = [(c1[0] + c2[0]) / 2, (c1[1] + c2[1]) / 2];
+    FX.flash('#ffffff66'); FX.ring(mid, { color: '#e8b64c', to: 260, width: 14 });
+    FX.burst(mid, { colors: ['#e8b64c', '#fbfbf7', '#5dff8a'], n: 60, speed: 520, shape: 'spark', gravity: 200 });
+    FX.shake(document.querySelector('.board'), 8, .3);
+    await wait(800);
+    if (S !== g) return;
+
+    const a = S.pick.p1, b = S.pick.p2;
+    const r = judge(a, b);
+    S.log.push({ turn: S.turn, a, b, r });
+
+    if (r === 0) {
+      sfx('draw');
+      S.turn++;
+      render();
+      msg('引き分け！', 'ロボット どうしは 引き分け。');
+      FX.stamp('DRAW', mid, { color: '#e8b64c', size: 56, rot: 0 });
+      FX.lightning($('slotP1'), $('slotP2'), { color: '#3fb4ff' });
+      await wait(1200);
+      if (S !== g) return;
+      beginTurn();
+      msg('引き分け！', `${S.turn}回目。次のカードを 選んでね`);
+      flushQueue();
+      return;
+    }
+
+    const w = r > 0 ? 'p1' : 'p2';
+    const pts = POINTS[S.side[w]];
+    S.score[w] += pts;
+    $('slot' + cap(w)).classList.add('win');
+    $('slot' + cap(opp(w))).classList.add('lose');
+    {
+      const duo = document.body.classList.contains('duo-mode');
+      const wEl = $('slot' + cap(w)), lEl = $('slot' + cap(opp(w)));
+      const col = { super: '#3fb4ff', bug: '#ff4fa8', robot: '#ff9f43' }[S.pick[w]];
+      FX.lightning(wEl, lEl, { color: col, dur: .7 });
+      setTimeout(() => {
+        FX.burst(lEl, { colors: ['#fbfbf7', '#9aa3a8', col], n: 50, speed: 420 });
+        FX.ring(lEl, { color: col, to: 200, width: 14 });
+      }, 180);
+      FX.burst(wEl, { colors: [col, '#e8b64c', '#fbfbf7'], n: 40, speed: 360, shape: 'star', gravity: 60 });
+      FX.stamp('WIN!', wEl, { color: '#5dff8a', size: 60, rot: duo ? 0 : -10, rotate: duo ? (w === 'p1' ? 90 : -90) : 0 });
+      if (S.side[w] === 'bug') {
+        // バグが スパコンを たおした！（4点）
+        setTimeout(() => { FX.banner('だいきんぼし！', `バグが スパコンを フリーズさせた！ ＋${pts}点`, { color: '#c2338a', dur: 1.6, rot: -3 }); FX.fireworks(4, { colors: ['#ff4fa8', '#e8b64c', '#fbfbf7'] }); }, 450);
+      }
+    }
+    const good = S.mode === '2p' ? (!net || w === view) : w === 'p1';   // 通信対戦は 自分が 勝ったか どうか
+    sfx(good ? 'win' : 'lose');
+    msg(`${S.names[w]} の勝ち${good ? '！' : '…'}`, FLAVOR[S.pick[w]], good ? 'good' : 'bad');
+    render();
+    await wait(1300);
+    if (S !== g) return;
+    showRoundEnd(w, pts, good);
+  }
+
+  function showRoundEnd(w, pts, good) {
+    const last = S.round >= TOTAL;
+    const next = S.mode === 'cpu'
+      ? `次は あなたが <b>${TEAM[S.side.p2]}</b> だよ`
+      : `次は ${S.names.p1} が <b>${TEAM[S.side.p2]}</b>、${S.names.p2} が <b>${TEAM[S.side.p1]}</b> だよ`;
+    $('roundEndSheet').innerHTML = `
+      <p class="eyebrow">ROUND ${S.round} RESULT</p>
+      <h2 class="${good ? '' : 'bad'}" ${good ? `style="color:${w === 'p1' ? '#3fb4ff' : '#ff4fa8'};text-shadow:0 0 16px ${w === 'p1' ? '#3fb4ff88' : '#ff4fa888'}"` : ''}>${S.names[w]} の勝ち${good ? '！' : '…'}</h2>
+      <div class="matchup">
+        <div style="display:grid;gap:6px;justify-items:center"><span class="slot-label">${S.names.p1}</span>${cardHTML(S.pick.p1)}</div>
+        <span class="vs">VS</span>
+        <div style="display:grid;gap:6px;justify-items:center"><span class="slot-label">${S.names.p2}</span>${cardHTML(S.pick.p2)}</div>
+      </div>
+      <p>${FLAVOR[S.pick[w]]}</p>
+      <p class="gain">${S.names[w]} ＋${pts}点</p>
+      <p style="color:var(--muted)">${last ? 'これで 最後の ラウンドだよ' : next}</p>
+      <button class="btn" id="nextBtn" type="button">${last ? 'けっかを見る' : '次のラウンドへ'}</button>`;
+    $('roundEnd').hidden = false;
+    $('nextBtn').focus();
+    $('nextBtn').onclick = () => act({ t: 'next', round: S.round });
+    S.ended = true;
+    if (S.pendingNext) nextRound();   // もう一方の画面で 先に おされていた
+  }
+
+  function confetti() {
+    const box = document.createElement('div'); box.className = 'confetti';
+    const colors = ['#5dff8a', '#e8b64c', '#ff6b5e', '#3fb4ff', '#c2338a', '#fbfbf7'];
+    for (let k = 0; k < 90; k++) {
+      const i = document.createElement('i');
+      i.style.left = Math.random() * 100 + 'vw';
+      i.style.background = colors[k % colors.length];
+      i.style.animationDuration = 2 + Math.random() * 2 + 's';
+      i.style.animationDelay = Math.random() * .8 + 's';
+      box.appendChild(i);
+    }
+    document.body.appendChild(box);
+    setTimeout(() => box.remove(), 5000);
+  }
+
+  function showFinal() {
+    const a = S.score.p1, b = S.score.p2;
+    // 今日の 記録：コンピューターに 勝った 回数 ・ 最高 点数
+    if (!IS_SUB) REC.update('supercon', r => {
+      r.games = (r.games || 0) + 1;
+      if (S.mode === 'cpu' && a > b) r.cpuWins = (r.cpuWins || 0) + 1;
+      if (S.mode === 'cpu') r.cpuGames = (r.cpuGames || 0) + 1;
+      const top = Math.max(a, S.mode === 'cpu' ? 0 : b);
+      if (!r.best || top > r.best.v) r.best = { v: top };
+      return r;
+    });
+    const w = a > b ? 'p1' : a < b ? 'p2' : null;
+    let title, note, good = true;
+    if (!w) { title = '引き分け！'; note = 'いい 勝負 だったね！'; sfx('draw'); }
+    else if (S.mode === 'cpu') {
+      good = w === 'p1';
+      title = good ? 'あなたの 大勝利！' : 'ざんねん！ コンピューターの勝ち';
+      note = good ? 'よみあいの 名人だね！' : 'コンピューターは あなたの くせを おぼえているよ。出す じゅんばんを かえてみよう！';
+      sfx(good ? 'win' : 'lose');
+    } else if (net) {
+      good = w === view;
+      title = good ? 'あなたの 大勝利！' : `ざんねん！ ${S.names[w]} の勝ち`;
+      note = good ? 'よみあいの 名人だね！' : 'もういちど 勝負 しよう！';
+      sfx(good ? 'win' : 'lose');
+    } else {
+      title = `${S.names[w]} の 大勝利！`;
+      note = 'チームを かえて もういちど 勝負 しよう！';
+      sfx('win');
+    }
+    $('roundEndSheet').innerHTML = `
+      <p class="eyebrow">FINAL RESULT</p>
+      ${w && good ? `<div style="width:120px">${ART.robot}</div>` : ''}
+      <h2 class="${good ? '' : 'bad'}" ${w && good ? `style="color:${w === 'p1' ? '#3fb4ff' : '#ff4fa8'};text-shadow:0 0 16px ${w === 'p1' ? '#3fb4ff88' : '#ff4fa888'}"` : ''}>${title}</h2>
+      <div class="final-scores"><div>${S.names.p1}<b>${a}</b></div><div>${S.names.p2}<b>${b}</b></div></div>
+      <p style="color:var(--muted)">${note}</p>
+      <div class="row-btns">
+        <button class="btn" id="againBtn" type="button">もういちど 遊ぶ</button>
+        <button class="btn ghost" id="homeBtn" type="button">モードを 選びなおす</button>
+      </div>`;
+    // 勝った人の 色の 花火 ＋ 勝利の BGM（プレイヤー1＝あお、プレイヤー2＝ピンク）
+    const winCol = w === 'p1' ? '#3fb4ff' : '#ff4fa8';
+    BGM.setTempo(1);
+    if (w && good && !IS_SUB) {
+      FX.banner(S.mode === 'cpu' || net ? 'YOU WIN!' : `${S.names[w]} WIN!`, 'おめでとう！', { color: winCol, dur: 2 });
+      FX.victory(winCol); BGM.play('victory');
+    } else if (w && !IS_SUB) {
+      FX.banner('LOSE…', '次は 勝てるよ！', { color: '#46566b', dur: 1.6 }); BGM.play('lose');
+    } else if (!w && !IS_SUB) FX.banner('DRAW', 'いい 勝負！', { color: '#9c6f22', dur: 1.6 });
+    $('againBtn').focus();
+    $('againBtn').onclick = () => act({ t: 'again' });
+    $('homeBtn').onclick = () => act({ t: 'title' });
+  }
+
+  function goTitle() {
+    FX.stopVictory(); if (!IS_SUB) { BGM.setTempo(1); BGM.play('supercon'); }
+    S = null;
+    document.body.classList.remove('duo-mode');
+    $('roundEnd').hidden = true;
+    $('game').hidden = true;
+    $('title').hidden = IS_SUB; $('waitSub').hidden = !IS_SUB;
+    window.scrollTo(0, 0);
+  }
+
+  // ---------- 表示 ----------
+  function msg(big, sub, tone = '') {
+    $('msg').innerHTML = `<div class="big pop ${tone}">${big}</div><div class="sub">${sub}</div>`;
+    $('msgP1').innerHTML = $('msgP2').innerHTML = $('msg').innerHTML;   // 左右の 人それぞれの 向きで 表示
+  }
+  function resetSlot(el) { el.className = 'flip empty'; el.innerHTML = ''; }
+  function sizeSlot(el) { el.style.setProperty('--fw', el.offsetWidth + 'px'); }
+  function placeSlot(el, type) {
+    el.className = 'flip drop';
+    el.innerHTML = `<div class="inner"><div class="card back"></div>${cardHTML(type)}</div>`;
+    sizeSlot(el);
+  }
+
+  // 二人モードは 手札の なかみ（切り札1まい＋ロボット）は おたがい わかっているので 表むきで OK。
+  // ひみつなのは「どれを 出すか」だけ → キーで こっそり 選ぶ
+  // 2画面モードでは 自分の 手札だけ 表むき。
+  function faceUp(p) {
+    if (S.mode === 'cpu') return p === 'p1';
+    return view === 'both' || p === view;
+  }
+  const KEYS = { p1: ['A', 'D'], p2: ['←', '→'] };
+
+  function render() {
+    $('roundChip').textContent = `ROUND ${S.round}/${TOTAL}`;
+    for (const p of P) {
+      const C = cap(p), side = S.side[p], hand = S.hand[p];
+      $(p + 'Label').innerHTML = S.names[p];
+      $(p + 'Score').innerHTML = `${S.score[p]}<small>点</small>`;
+      $(p + 'Team').className = `pill ${side}`; $(p + 'Team').textContent = TEAM[side];
+      $('slotLabel' + C).innerHTML = `${S.names[p]} の カード`;
+
+      const isActive = !S.busy && !S.pick[p] && (S.mode === '2p' || p === 'p1');
+      const sp = hand.filter(c => c !== 'robot').length;
+      $('info' + C).innerHTML = `<span class="led ${isActive ? 'on' : ''}"></span><b>${S.names[p]}</b> 残り：<span class="pill ${side}">${NAME[side]} ${sp}まい</span><span class="pill robot">ロボット ${hand.length - sp}まい</span>`;
+
+      const canPick = isActive && faceUp(p);
+      const handEl = $('hand' + C);
+      handEl.classList.toggle('locked', faceUp(p) && !canPick);
+      handEl.innerHTML = faceUp(p)
+        ? hand.map((t, i) => cardHTML(t, 'button', `type="button" data-p="${p}" data-i="${i}" aria-label="${NAME[t]}を出す"`)).join('')
+        : hand.map(() => `<div class="card back"></div>`).join('');
+
+      $('row' + C).classList.toggle('active', isActive);
+      const duo = S.mode === '2p';
+      const [kR, kS] = KEYS[p];
+      $('keys' + C).innerHTML = duo
+        ? `<span class="key ${hand.length - sp ? '' : 'off'}"><kbd>${kR}</kbd>ロボット</span><span class="key ${side}"><kbd>${kS}</kbd>${NAME[side]}</span>`
+        : '';
+      $('keys' + C).hidden = !duo || !canPick || view === 'both';   // 1画面の 二人モードは タッチで 選ぶ
+      const mine = view === 'both' || p === view;
+      const picked = duo && S.pick[p] && !S.busy;
+      const text = picked ? (mine ? '選んだ！ 相手を まってね' : '選んだ！')
+        : duo && isActive && !canPick ? 'かんがえちゅう…'
+        : !canPick ? ''
+        : !duo ? 'カードを クリックして 出そう'
+        : view === 'both' ? 'カードを タッチ！ 手で かくして こっそり 選ぼう' : 'キーか カードの クリックで 選ぼう';
+      $('hint' + C).className = 'hint' + (picked ? ' done' : '');
+      $('hint' + C).textContent = text;
+      $('hint' + C).hidden = !text;
+    }
+    $('log').innerHTML = S.log.map(l => {
+      const res = l.r === 0 ? '引き分け' : S.mode === 'cpu' ? (l.r > 0 ? '勝ち' : '負け') : `${l.r > 0 ? S.names.p1 : S.names.p2}の勝ち`;
+      return `<span>${l.turn}回目：${NAME[l.a]} vs ${NAME[l.b]} → ${res}</span>`;
+    }).join('');
+    fitScreen();
+  }
+
+  // タッチパネルで 二人 同時に おせるように、指が ふれた しゅんかん（pointerdown）で 選ぶ
+  ['handP1', 'handP2'].forEach(id => {
+    const choose = e => {
+      const b = e.target.closest('button.card');
+      if (b && S) pick(b.dataset.p, S.hand[b.dataset.p][+b.dataset.i]);
+    };
+    $(id).addEventListener('pointerdown', e => { if (e.button === 0) { e.preventDefault(); choose(e); } });
+    $(id).addEventListener('click', e => { if (e.detail === 0) choose(e); });   // キーボード（Enter）用
+  });
+  // 二人モード：左の人 A/D、右の人 ←/→
+  const KEYMAP = { a: ['p1', 'robot'], d: ['p1', 'special'], arrowleft: ['p2', 'robot'], arrowright: ['p2', 'special'] };
+  document.addEventListener('keydown', e => {
+    if (!S || S.mode !== '2p' || e.repeat || e.ctrlKey || e.metaKey || e.altKey) return;
+    if (!$('roundEnd').hidden || !$('rulesModal').hidden) return;
+    const k = KEYMAP[e.key.toLowerCase()];
+    if (!k) return;
+    e.preventDefault();
+    const [kp, kind] = k;
+    const p = net ? view : kp;   // 通信対戦では どちらの キーでも 自分の カード
+    pick(p, kind === 'robot' ? 'robot' : S.side[p]);
+  });
+  window.addEventListener('resize', () => { fitScreen(); ['slotP1', 'slotP2'].forEach(id => sizeSlot($(id))); });
+
+  $('startBtn').onclick = () => {
+    sfx('pick');
+    if (mode === 'online') {
+      if (net !== 'host') return;
+      return act({ t: 'start', mode: '2p', raw: { p1: myNetName(), p2: netPeerName } });
+    }
+    const raw = { p1: $('p1Name').value.trim(), p2: $('p2Name').value.trim() };
+    if (mode === '2p') {
+      try { localStorage.setItem('ousama-p1', raw.p1); localStorage.setItem('ousama-p2', raw.p2); } catch (e) {}
+    }
+    act({ t: 'start', mode, raw });
+  };
+  $('openSubBtn').onclick = () => {
+    window.open(location.href.split('#')[0] + '#p2', 'supercon-p2', 'popup,width=1100,height=760');
+  };
+  $('subFsBtn').onclick = () => { try { document.documentElement.requestFullscreen().catch(() => {}); } catch (e) {} };
+  $('soundBtn').textContent = `音：${soundOn ? 'ON' : 'OFF'}`;
+  $('soundBtn').onclick = () => { soundOn = !soundOn; BGM.setEnabled(soundOn); $('soundBtn').textContent = `音：${soundOn ? 'ON' : 'OFF'}`; };
+  $('fsBtn').onclick = () => {
+    try {
+      if (document.fullscreenElement) document.exitFullscreen().catch(() => {});
+      else document.documentElement.requestFullscreen().catch(() => {});
+    } catch (e) {}
+  };
+  document.addEventListener('fullscreenchange', () => {
+    $('fsBtn').textContent = document.fullscreenElement ? 'もとにもどす' : '全画面';
+  });
+  let quitTimer = null;
+  $('quitBtn').onclick = () => {
+    const b = $('quitBtn');
+    if (b.dataset.armed) { clearTimeout(quitTimer); delete b.dataset.armed; b.textContent = 'やめる'; act({ t: 'title' }); return; }
+    b.dataset.armed = '1'; b.textContent = 'ほんとうに やめる？';
+    quitTimer = setTimeout(() => { delete b.dataset.armed; b.textContent = 'やめる'; }, 3000);
+  };
+  $('rulesBtn').onclick = () => {
+    $('rulesHolder').innerHTML = $('rulesBlock').innerHTML.replace('id="chain"', '');
+    $('rulesModal').hidden = false; $('closeRules').focus();
+  };
+  $('closeRules').onclick = () => { $('rulesModal').hidden = true; };
+  document.addEventListener('keydown', e => { if (e.key === 'Escape') $('rulesModal').hidden = true; });
+
+  // 2画面モード：もう一方の ウィンドウを さがす
+  if (IS_SUB) { $('title').hidden = true; $('waitSub').hidden = false; document.title = 'スパコンとバグ（プレイヤー2）'; }
+  renderLink();
+  if (!IS_SUB) IDLE.start({ seconds: 120, pause: () => !!netWant });   // 2ふん さわらないと ゲーム選びに もどる（通信対戦ちゅうは もどらない）
+  send({ t: 'hello', sub: IS_SUB });
+  window.addEventListener('pagehide', () => send({ t: 'bye', sub: IS_SUB }));
+})();
+</script>
