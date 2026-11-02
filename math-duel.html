@@ -40,8 +40,13 @@
     line-height: 1.5;
     touch-action: manipulation;
     user-select: none; -webkit-user-select: none;
-    display: grid; grid-template-rows: auto auto minmax(0, 1fr); gap: 10px; overflow: hidden;
+    display: grid; grid-template-rows: auto auto auto minmax(0, 1fr); gap: 10px; overflow: hidden;
   }
+  /* 接続パネルの 高さを 確保し、ゲーム盤が ボタンに 重ならないように する。 */
+  body > header { grid-row: 1; }
+  body > .setup { grid-row: 2; }
+  body > .net { grid-row: 3; }
+  body > .board { grid-row: 4; }
   h1, h2, h3 { font-family: var(--display); font-weight: 400; margin: 0; letter-spacing: .04em; text-wrap: balance; }
   button, select { font-family: var(--body); color: inherit; }
   button:focus-visible, select:focus-visible, a:focus-visible { outline: 4px solid #fff; outline-offset: 3px; }
