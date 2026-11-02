@@ -89,7 +89,8 @@
   .attract { position: fixed; inset: 0; z-index: 80; background: #031510; display: grid; cursor: pointer; }
   .attract[hidden] { display: none; }
   .attract iframe { position: absolute; inset: 0; width: 100%; height: 100%; border: 0; pointer-events: none; opacity: .85; }
-  .attract .shade { position: absolute; inset: 0; background: radial-gradient(ellipse at center, #031510cc 0%, #03151088 45%, #03151044 80%); pointer-events: none; }
+  /* .shade は デモの 上に かぶせて タッチを うけとる（iPad では iframe に タッチが すいこまれる ことが あるため） */
+  .attract .shade { position: absolute; inset: 0; background: radial-gradient(ellipse at center, #031510cc 0%, #03151088 45%, #03151044 80%); touch-action: none; }
   .attract .inner { position: relative; display: grid; place-content: center; justify-items: center; gap: 22px; text-align: center; padding: 20px; pointer-events: none; }
   .attract .logo { font-size: clamp(48px, 9vw, 110px); }
   .attract .touch { font-family: var(--display); font-size: clamp(26px, 4.5vw, 52px); color: var(--gold); text-shadow: 0 4px 0 var(--gold-deep), 0 0 24px #e8b64c88; animation: touchBlink 1.2s ease-in-out infinite; }
@@ -145,7 +146,7 @@
       <span class="silk no">GAME 05</span>
       <span class="pic"><svg viewBox="0 0 120 120"><rect x="22" y="8" width="76" height="104" rx="10" fill="#2c3848" stroke="#04140e" stroke-width="3"/><rect x="30" y="16" width="60" height="26" rx="4" fill="#04140e"/><text x="84" y="36" font-family="DotGothic16, monospace" font-size="16" fill="#5dff8a" text-anchor="end">7×8=?</text><g font-family="DotGothic16, monospace" font-size="15" text-anchor="middle"><rect x="30" y="50" width="16" height="14" rx="3" fill="#3fb4ff"/><rect x="52" y="50" width="16" height="14" rx="3" fill="#3fb4ff"/><rect x="74" y="50" width="16" height="14" rx="3" fill="#ff9f43"/><rect x="30" y="70" width="16" height="14" rx="3" fill="#3fb4ff"/><rect x="52" y="70" width="16" height="14" rx="3" fill="#3fb4ff"/><rect x="74" y="70" width="16" height="14" rx="3" fill="#ff9f43"/><rect x="30" y="90" width="16" height="14" rx="3" fill="#3fb4ff"/><rect x="52" y="90" width="16" height="14" rx="3" fill="#3fb4ff"/><rect x="74" y="90" width="16" height="14" rx="3" fill="#e8b64c"/></g></svg></span>
       <h2>計算バトル</h2>
-      <p>二人で 力を あわせて 計算で バグ大王を たおせ！ 電気・2進数・歯車の 問題も！</p>
+      <p>二人で 力を あわせて 計算で バグ大王を たおせ！ 電気・2進数・歯車の 問題も！ 通信対戦も できるよ。</p>
       <span class="learn">まなべること：オームの法則と 2進数</span>
       <span class="play">遊ぶ</span>
     </a>
@@ -161,7 +162,7 @@
 </div>
 
 <div class="attract" id="attract" hidden>
-  <iframe id="demoFrame" title="デモ" tabindex="-1" aria-hidden="true"></iframe>
+  <iframe id="demoFrame" title="デモ" tabindex="-1" aria-hidden="true" inert></iframe>
   <div class="shade"></div>
   <div class="inner">
     <h1 class="logo"><ruby>高専<rt>こうせん</rt></ruby> カードゲーム</h1>
@@ -494,7 +495,9 @@ window.BGM = (() => {
     BGM.play('menu');
     IDLE.reset();
   }
-  att.addEventListener('pointerdown', e => { e.preventDefault(); e.stopPropagation(); closeAttract(); });
+  // iPad では pointerdown が こない ことが あるので、タッチ・クリックでも とじる
+  const tapClose = e => { e.preventDefault(); e.stopPropagation(); closeAttract(); };
+  ['pointerdown', 'touchstart', 'mousedown', 'click'].forEach(t => att.addEventListener(t, tapClose, { passive: false }));
   addEventListener('keydown', closeAttract);
   IDLE.start({ seconds: 45, warn: 0, home: openAttract, pause: () => !att.hidden });
 })();

@@ -74,6 +74,25 @@
   .setup .hint { color: var(--muted); font-size: 13px; font-weight: 800; align-self: center; }
   body.playing .setup .option, body.playing .setup .hint { display: none; }
 
+  /* 通信対戦：へやを つくる／ばんごうで さんか */
+  .net { display: grid; gap: 10px; justify-items: center; background: var(--panel); border: 2px solid var(--line); border-radius: 14px; padding: 12px 18px; max-width: 760px; width: 100%; margin: 0 auto 10px; }
+  body.playing .net { display: none; }
+  .net label { display: grid; gap: 4px; font-weight: 800; font-size: 13px; color: var(--muted); text-align: left; }
+  .net input { font: inherit; font-size: 17px; padding: 6px 12px; border-radius: 10px; border: 2px solid var(--line); background: #04140e; color: var(--ink); width: 11em; max-width: 100%; }
+  .net input:focus-visible { outline: 3px solid var(--led); outline-offset: 1px; }
+  .net-row { display: flex; gap: 10px; align-items: center; justify-content: center; flex-wrap: wrap; }
+  .net-or { color: var(--muted); font-weight: 800; font-size: 13px; }
+  #netCode { width: 8.5em; font-family: var(--display); letter-spacing: .12em; text-align: center; }
+  .net-code { display: grid; justify-items: center; font-weight: 800; color: var(--muted); font-size: 14px; }
+  .net-code b { font-family: var(--display); font-weight: 400; font-size: clamp(40px, 7vw, 58px); line-height: 1.1; color: var(--gold); letter-spacing: .18em; text-shadow: 0 0 16px #e8b64c66; }
+  .net-status { color: var(--muted); font-size: 14px; font-weight: 800; display: flex; gap: 8px; align-items: center; justify-content: center; flex-wrap: wrap; margin: 0; text-align: center; }
+  .net-status.ok { color: var(--led); }
+  .net-status.bad { color: #ff8f86; }
+  .net-status .led { display: inline-block; width: 10px; height: 10px; border-radius: 50%; background: var(--led); box-shadow: 0 0 8px 2px #5dff8a99; }
+  /* 通信対戦では 相手の パネルは 見るだけ */
+  .player.remote .keys { opacity: .35; }
+  .player .you { display: inline-block; white-space: nowrap; font-size: .7em; background: var(--gold); color: var(--card-ink); border-radius: 999px; padding: 0 8px; margin-left: 6px; vertical-align: middle; }
+
   /* ---------- ボード ---------- */
   .board { display: grid; grid-template-columns: 1fr clamp(190px, 21vw, 300px) 1fr; gap: 12px; min-height: 0; }
   /* ---------- ボス ---------- */
@@ -176,12 +195,26 @@
 </header>
 
 <section class="setup">
+  <div class="option">あそびかた<div class="seg" data-key="play"><button type="button" data-v="local" aria-pressed="true">この画面で 二人</button><button type="button" data-v="online" aria-pressed="false">🌐 通信で 二人</button></div></div>
   <div class="option">むずかしさ<div class="seg" data-key="level"><button type="button" data-v="10" aria-pressed="true">かんたん 1〜10</button><button type="button" data-v="30" aria-pressed="false">ふつう 1〜30</button><button type="button" data-v="100" aria-pressed="false">むずかしい 1〜100</button></div></div>
   <div class="option">問題<div class="seg" data-key="op"><button type="button" data-v="kosen" aria-pressed="true">⚡ 高専チャレンジ</button><button type="button" data-v="+" aria-pressed="false">たし算 ＋</button><button type="button" data-v="−" aria-pressed="false">ひき算 −</button><button type="button" data-v="×" aria-pressed="false">かけ算 ×</button><button type="button" data-v="mixed" aria-pressed="false">ミックス</button></div></div>
   <div class="option">対戦時間<div class="seg" data-key="duration"><button type="button" data-v="30" aria-pressed="false">30秒</button><button type="button" data-v="60" aria-pressed="true">60秒</button><button type="button" data-v="90" aria-pressed="false">90秒</button></div></div>
   <button class="btn" type="button" id="start">スタート ▶</button>
   <button class="btn ghost small" type="button" id="reset">やりなおす</button>
   <span class="hint">正解すると バグ大王に ダメージ！ 続けて 正解すると コンボで 大ダメージ！</span>
+</section>
+
+<section class="net" id="netBox" hidden>
+  <label for="netName">あなたの なまえ<input id="netName" type="text" maxlength="8" placeholder="なまえ"></label>
+  <div class="net-row" id="netPick">
+    <button class="btn small" id="netHostBtn" type="button">へやを つくる</button>
+    <span class="net-or">または</span>
+    <input id="netCode" type="text" inputmode="numeric" maxlength="4" placeholder="4けたの ばんごう" aria-label="へやの ばんごう">
+    <button class="btn small" id="netJoinBtn" type="button">さんかする</button>
+  </div>
+  <div class="net-code" id="netCodeShow" hidden></div>
+  <p class="net-status" id="netStatus"></p>
+  <button class="btn ghost small" id="netLeaveBtn" type="button" hidden>つうしんを きる</button>
 </section>
 
 <main class="board face" id="board"></main>
@@ -493,6 +526,88 @@ window.IDLE = (() => {
 })();
 </script>
 <!-- ===== /COMMON ===== -->
+<!-- ===== NET：インターネットで 2台を つなぐ（PeerJS ＝ WebRTC。サーバーは いらない） ===== -->
+<script>
+window.NET = (() => {
+  const LIB = 'https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js';
+  let peer = null, conn = null, game = '', beatT = 0, waitT = 0, lastIn = 0;
+  const ev = {}, emit = (k, ...a) => ev[k] && ev[k](...a);
+  // ライブラリは 通信対戦を つかう ときだけ 読みこむ（ネットが なくても ほかの モードは 遊べる）
+  function load() {
+    if (window.Peer) return Promise.resolve();
+    return new Promise((ok, ng) => {
+      const s = document.createElement('script'); s.src = LIB;
+      s.onload = ok; s.onerror = () => { s.remove(); ng(new Error('lib')); };
+      document.head.appendChild(s);
+    });
+  }
+  const idOf = code => `kosen-ecard-${game}-${code}`;
+  function bind(c) {
+    conn = c;
+    clearTimeout(waitT);
+    waitT = setTimeout(() => { if (conn === c && !c.open) { drop(c); emit('error', 'timeout'); } }, 15000);
+    c.on('open', () => {
+      if (conn !== c) return;
+      clearTimeout(waitT); lastIn = Date.now(); c.wasOpen = true;
+      // とじた 合図が とどかない ことも あるので、2秒ごとに 合図を おくりあう
+      clearInterval(beatT);
+      beatT = setInterval(() => { send({ t: 'net-beat' }); if (Date.now() - lastIn > 9000) drop(c); }, 2000);
+      emit('open');
+    });
+    c.on('data', m => { if (conn !== c) return; lastIn = Date.now(); if (m && m.t !== 'net-beat') emit('data', m); });
+    c.on('close', () => drop(c));
+    c.on('error', () => drop(c));
+  }
+  function drop(c) {
+    if (!c || conn !== c) return;
+    const was = c.wasOpen;
+    conn = null; clearInterval(beatT); clearTimeout(waitT);
+    try { c.close(); } catch (e) {}
+    if (was) emit('close');
+  }
+  function watch(p) {
+    p.on('error', e => {
+      if (peer !== p || (conn && conn.open)) return;   // つながった あとの サーバーの エラーは 気にしない
+      if (e.type === 'unavailable-id') return emit('retry');
+      if (e.type === 'peer-unavailable') { conn = null; clearTimeout(waitT); }
+      emit('error', e.type);
+    });
+  }
+  // へやを つくる：4けたの ばんごうを きめて 相手を まつ
+  async function host(g, tries = 0) {
+    game = g; leave();
+    try { await load(); } catch (e) { return emit('error', 'lib'); }
+    const code = String(1000 + Math.floor(Math.random() * 9000));
+    const p = peer = new Peer(idOf(code), { debug: 0 });
+    watch(p);
+    ev.retry = () => { if (tries < 5) host(g, tries + 1); else emit('error', 'unavailable-id'); };
+    p.on('open', () => { if (peer === p) emit('code', code); });
+    p.on('connection', c => {
+      if (peer !== p) return;
+      if (conn) { c.on('open', () => c.close()); return; }   // 3人めは ことわる
+      bind(c);
+    });
+  }
+  // ばんごうの へやに さんかする
+  async function join(g, code) {
+    game = g; leave();
+    try { await load(); } catch (e) { return emit('error', 'lib'); }
+    const p = peer = new Peer({ debug: 0 });
+    watch(p);
+    p.on('open', () => { if (peer === p) bind(p.connect(idOf(code), { reliable: true, serialization: 'json' })); });
+  }
+  function send(m) { if (conn && conn.open) try { conn.send(m); } catch (e) {} }
+  function leave() {
+    const c = conn, p = peer;
+    conn = null; peer = null; clearInterval(beatT); clearTimeout(waitT);
+    if (c) try { c.close(); } catch (e) {}
+    if (p) try { p.destroy(); } catch (e) {}
+  }
+  addEventListener('pagehide', leave);
+  return { host, join, send, leave, on(k, fn) { ev[k] = fn; }, get open() { return !!(conn && conn.open); } };
+})();
+</script>
+<!-- ===== /NET ===== -->
 <!-- ===== BGM：ブラウザの 中で 作る シンセ BGM（音の ファイルは いらない） ===== -->
 <style>
   .bgm-toggle { position: fixed; right: 12px; bottom: 12px; z-index: 70; font: 800 14px "M PLUS Rounded 1c", "Yu Gothic", sans-serif;
@@ -711,6 +826,11 @@ window.BGM = (() => {
   ];
   let mode = 'idle', active = 0, questions = [], startAt = 0, endAt = 0, duration = 60, max = 10, operation = '+', lastCount = 0;
   const opts = { level: '10', op: 'kosen', duration: '60' };
+  // 通信対戦：online＝「通信で 二人」を 選んで いる、net＝つながって いる あいだ 'host'（へやを つくった人＝青）／'guest'（オレンジ）
+  let online = false, net = null;
+  const me = () => net === 'host' ? 0 : net === 'guest' ? 1 : null;
+  const canUse = i => !net || i === me();   // その パネルを この 画面で そうさ できるか
+  const esc = s => String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 
   // ---------- 音 ----------
   let soundOn = BGM.enabled, actx = null;
@@ -775,14 +895,16 @@ window.BGM = (() => {
     $('bossBody').appendChild(d); setTimeout(() => d.remove(), 950);
   }
   // バグ大王の こうげき：どちらかの チームの キーが 2秒 つかえない
-  function bossAttack() {
+  // target：通信対戦で 相手から 「この チームを こうげき」と おくられて きた とき
+  function bossAttack(target) {
     const live = [0, 1].filter(i => !$('player' + i).classList.contains('jam'));
     if (!live.length) return;
-    const i = live[Math.floor(Math.random() * live.length)], el = $('player' + i);
+    const i = target ?? live[Math.floor(Math.random() * live.length)], el = $('player' + i);
+    if (net === 'host') NET.send({ t: 'atk', i });
     say(SAY.attack); el.classList.add('jam'); sfx('bad');
     FX.lightning($('bossBody'), el, { color: '#c2338a', dur: .7 }); FX.shake(el, 8, .4);
     $('keys' + i).querySelectorAll('button').forEach(b => b.disabled = true);
-    setTimeout(() => { el.classList.remove('jam'); if (mode === 'playing') $('keys' + i).querySelectorAll('button').forEach(b => b.disabled = false); }, 2000);
+    setTimeout(() => { el.classList.remove('jam'); if (mode === 'playing' && canUse(i)) $('keys' + i).querySelectorAll('button').forEach(b => b.disabled = false); }, 2000);
   }
 
   // ---------- パネル ----------
@@ -812,22 +934,27 @@ window.BGM = (() => {
   // 向かいあわせ（タッチパネルの 左右に すわる）／ ならべる
   let face = true;
   try { face = localStorage.getItem('math-face') !== 'off'; } catch (e) {}
-  function syncFace() { $('board').classList.toggle('face', face); $('faceBtn').textContent = `向かいあわせ：${face ? 'ON' : 'OFF'}`; }
+  // 通信対戦は 1人1台 なので 向かいあわせに しない
+  function syncFace() { $('board').classList.toggle('face', face && !online); $('faceBtn').hidden = online; $('faceBtn').textContent = `向かいあわせ：${face ? 'ON' : 'OFF'}`; }
   $('faceBtn').onclick = () => { face = !face; try { localStorage.setItem('math-face', face ? 'on' : 'off'); } catch (e) {} syncFace(); };
   syncFace();
 
   // せってい ボタン
   document.querySelectorAll('.seg').forEach(seg => seg.addEventListener('click', e => {
     const b = e.target.closest('button'); if (!b) return;
+    if (seg.dataset.key === 'play') return setOnline(b.dataset.v === 'online');
     opts[seg.dataset.key] = b.dataset.v;
     seg.querySelectorAll('button').forEach(x => x.setAttribute('aria-pressed', x === b));
     if (seg.dataset.key === 'duration') reset();
   }));
 
-  function choose(i) { active = i; players.forEach((_, j) => $('player' + j).classList.toggle('active', i === j)); }
+  function choose(i) { if (!canUse(i)) return; active = i; players.forEach((_, j) => $('player' + j).classList.toggle('active', i === j)); }
   // ⚡ 高専チャレンジ：電気・回路・コンピューターの 計算
-  const pick = a => a[Math.floor(Math.random() * a.length)];
-  const rnd = (a, b) => a + Math.floor(Math.random() * (b - a + 1));
+  // 問題は 乱数の たね（seed）から 作る：通信対戦では 両方の 画面で 同じ 問題に なる
+  let seed = 1;
+  const rand = () => { seed = (seed + 0x6D2B79F5) | 0; let t = seed; t = Math.imul(t ^ (t >>> 15), t | 1); t ^= t + Math.imul(t ^ (t >>> 7), t | 61); return ((t ^ (t >>> 14)) >>> 0) / 4294967296; };
+  const pick = a => a[Math.floor(rand() * a.length)];
+  const rnd = (a, b) => a + Math.floor(rand() * (b - a + 1));
   function kosenQuestion() {
     const big = max > 10, kind = pick(['ohm', 'series', 'battery', 'binary', 'gear', 'ohm', 'binary']);
     if (kind === 'ohm') {
@@ -851,10 +978,10 @@ window.BGM = (() => {
   }
   function makeQuestion() {
     if (operation === 'kosen') return kosenQuestion();
-    let a = 1 + Math.floor(Math.random() * max), b = 1 + Math.floor(Math.random() * max);
-    const op = operation === 'mixed' ? ['+', '−', '×'][Math.floor(Math.random() * 3)] : operation;
+    let a = rnd(1, max), b = rnd(1, max);
+    const op = operation === 'mixed' ? pick(['+', '−', '×']) : operation;
     if (op === '−' && a < b) [a, b] = [b, a];
-    if (op === '×') { a = 1 + Math.floor(Math.random() * (max === 10 ? 5 : 12)); b = 1 + Math.floor(Math.random() * 12); }
+    if (op === '×') { a = rnd(1, max === 10 ? 5 : 12); b = rnd(1, 12); }
     return { a, b, op, answer: op === '+' ? a + b : op === '−' ? a - b : a * b };
   }
   function question(i) {
@@ -870,10 +997,10 @@ window.BGM = (() => {
     $('index' + i).textContent = `第${p.index + 1}問`;
     $('score' + i).innerHTML = `${p.score}<small>点</small>`; $('a' + i).textContent = p.answer;
   }
-  function enable(yes) { document.querySelectorAll('.keys button').forEach(b => b.disabled = !yes); }
+  function enable(yes) { players.forEach((_, i) => $('keys' + i).querySelectorAll('button').forEach(b => b.disabled = !yes || !canUse(i))); }
   function feedback(i, text, tone = '') { const f = $('f' + i); f.innerHTML = text; f.className = 'feedback ' + tone; }
   function reset() {
-    mode = 'idle'; startAt = 0; endAt = 0; questions = [];
+    mode = 'idle'; startAt = 0; endAt = 0; questions = []; clearTimeout(endWait);
     document.body.classList.remove('playing'); $('start').disabled = false; $('result').hidden = true; enable(false);
     FX.stopVictory(); BGM.setTempo(1); BGM.play('supercon');
     // ボスの HP：時間と むずかしさで きめる
@@ -889,15 +1016,30 @@ window.BGM = (() => {
       $('time' + i).textContent = opts.duration + '秒'; $('bar' + i).style.width = '100%';
     });
   }
-  function start() {
+  // d：通信対戦で へやを つくった人から とどいた せってい（たね・むずかしさ・なまえ）
+  function start(d) {
+    if (online && !d) { if (net === 'host') hostStart(); return; }
+    if (d) {
+      for (const k of ['level', 'op', 'duration']) {
+        const b = [...document.querySelectorAll(`.seg[data-key="${k}"] button`)].find(x => x.dataset.v === d.opts?.[k]);
+        if (!b) return;   // しらない せっていは うけつけない
+        opts[k] = b.dataset.v;
+        b.parentElement.querySelectorAll('button').forEach(x => x.setAttribute('aria-pressed', x === b));
+      }
+    }
+    setNames(d && d.names);
     reset();
     duration = Number(opts.duration); max = Number(opts.level); operation = opts.op;
+    seed = d ? Number(d.seed) | 0 : (Math.random() * 4294967296) | 0;
+    questions = Array.from({ length: 400 }, makeQuestion);
     mode = 'countdown'; startAt = performance.now() + 3000; endAt = startAt + duration * 1000; lastCount = 0;
     $('start').disabled = true; document.body.classList.add('playing'); say(SAY.start); boss.nextAtk = startAt + 12000; tick();
   }
   function finish(defeated = false) {
     if (mode === 'finished') return;
+    clearTimeout(endWait);
     mode = 'finished'; enable(false); $('start').disabled = false;
+    $('again').disabled = false; $('again').textContent = 'もう一度 たたかう';
     const [a, b] = players, total = a.score + b.score, mvp = a.score === b.score ? null : a.score > b.score ? a : b;
     const secs = Math.round((performance.now() - startAt) / 1000);
     $('finals').innerHTML = players.map(p => `<div style="color:${p.color}">${p.name}<b>${p.score}<small style="font-size:.4em">ダメージ</small></b>${p === mvp ? '<small>👑 MVP</small>' : ''}</div>`).join('');
@@ -930,10 +1072,25 @@ window.BGM = (() => {
       return r;
     });
   }
+  // ゲームの 終わりは へやを つくった人が きめて、相手に けっかを おくる
+  let endWait = 0;
+  function endGame(defeated) {
+    if (net === 'guest') return waitEnd();
+    if (mode === 'finished') return;
+    finish(defeated);
+    if (net === 'host') NET.send({ t: 'end', defeated, hp: boss.hp, scores: players.map(p => p.score) });
+  }
+  // さんかした人：けっかが とどくまで まつ（とどかなければ 4秒で 自分で しめる）
+  function waitEnd() {
+    if (mode === 'waiting' || mode === 'finished') return;
+    mode = 'waiting'; enable(false);
+    feedback(me(), 'けっかを まってるよ…');
+    clearTimeout(endWait); endWait = setTimeout(() => finish(boss.hp <= 0), 4000);
+  }
   function tick() {
-    if (mode === 'idle' || mode === 'finished') return;
+    if (mode === 'idle' || mode === 'finished' || mode === 'waiting') return;
     const now = performance.now();
-    if (now >= endAt) { finish(false); return; }
+    if (now >= endAt) { endGame(false); return; }
     if (now < startAt) {
       const n = Math.ceil((startAt - now) / 1000);
       if (n !== lastCount) { lastCount = n; sfx('tick'); }
@@ -945,58 +1102,217 @@ window.BGM = (() => {
       FX.banner('START!', '', { color: '#1d8a46', dur: .9 });
       players.forEach((_, i) => { question(i); feedback(i, 'スタート！'); });
     }
-    if (now >= boss.nextAtk) { bossAttack(); boss.nextAtk = now + (boss.angry ? 7000 : 12000); }
+    if (net !== 'guest' && now >= boss.nextAtk) { bossAttack(); boss.nextAtk = now + (boss.angry ? 7000 : 12000); }
     players.forEach((_, i) => {
       $('time' + i).textContent = Math.ceil((endAt - now) / 1000) + '秒';
       $('bar' + i).style.width = Math.max(0, (endAt - now) / (duration * 1000) * 100) + '%';
     });
   }
+  // 正解の 演出と バグ大王への ダメージ（自分の 正解でも、通信で とどいた 相手の 正解でも つかう）
+  function hitBoss(i, dmg, learned) {
+    const p = players[i], panel = $('player' + i), big = p.combo >= 3;
+    $('score' + i).innerHTML = `${p.score}<small>ダメージ</small>`;
+    feedback(i, `${big ? `<span class="combo">${p.combo}コンボ！</span> ` : ''}正解！ ${dmg}ダメージ${learned ? ` 💡${learned}` : ''}`, 'good'); sfx('good');
+    panel.classList.remove('ok'); void panel.offsetWidth; panel.classList.add('ok');
+    // こうげき：パネルから バグ大王へ 電気
+    FX.lightning($('q' + i), $('bossBody'), { color: p.color, dur: .45 });
+    boss.hp -= dmg; popDmg(dmg, p.color, big); bossHud();
+    bossEl.classList.remove('hit'); void bossEl.offsetWidth; bossEl.classList.add('hit');
+    FX.burst($('bossBody'), { colors: [p.color, '#fbfbf7', '#ff8fd0'], n: big ? 40 : 18, speed: big ? 420 : 260, shape: 'spark', gravity: 0 });
+    if (big && p.combo % 3 === 0) FX.stamp(`${p.combo}コンボ！`, $('q' + i), { color: p.color, size: 40, rotate: face && !online ? (i ? -90 : 90) : 0 });
+    if (!boss.angry && boss.hp <= boss.max / 2) { boss.angry = true; say(SAY.angry); BGM.setTempo(1.15); FX.flash('#ff3b3b44'); boss.nextAtk = Math.min(boss.nextAtk, performance.now() + 2500); }
+    else say(SAY.hurt[Math.floor(Math.random() * SAY.hurt.length)]);
+    if (boss.hp <= 0) endGame(true);
+  }
+  function miss(i) {
+    const p = players[i], panel = $('player' + i);
+    p.answer = ''; $('a' + i).textContent = ''; p.combo = 0;
+    feedback(i, 'おしい！ もう一度 やってみよう（コンボ リセット）', 'bad'); sfx('bad');
+    say('ワッハッハ！ まちがえたな！');
+    panel.classList.remove('ng'); void panel.offsetWidth; panel.classList.add('ng');
+  }
   function key(i, k) {
     tick();
-    if (mode !== 'playing') return;
-    const p = players[i], panel = $('player' + i);
+    if (mode !== 'playing' || !canUse(i)) return;
+    const p = players[i];
     if (k === '答える') {
       if (p.answer === '') return;
       if (Number(p.answer) === questions[p.index].answer) {
-        const q = questions[p.index], learned = q.learn;
+        const q = questions[p.index];
         p.combo++; p.ok++;
         // ダメージ：きほん 10 ＋ 高専チャレンジ 5 ＋ コンボ（最大 ＋15）
-        const dmg = 10 + (q.text ? 5 : 0) + Math.min(15, (p.combo - 1) * 3), big = p.combo >= 3;
+        const dmg = 10 + (q.text ? 5 : 0) + Math.min(15, (p.combo - 1) * 3);
         p.score += dmg; p.index++; p.answer = ''; question(i);
-        $('score' + i).innerHTML = `${p.score}<small>ダメージ</small>`;
-        feedback(i, `${big ? `<span class="combo">${p.combo}コンボ！</span> ` : ''}正解！ ${dmg}ダメージ${learned ? ` 💡${learned}` : ''}`, 'good'); sfx('good');
-        panel.classList.remove('ok'); void panel.offsetWidth; panel.classList.add('ok');
-        // こうげき：パネルから バグ大王へ 電気
-        FX.lightning($('q' + i), $('bossBody'), { color: p.color, dur: .45 });
-        boss.hp -= dmg; popDmg(dmg, p.color, big); bossHud();
-        bossEl.classList.remove('hit'); void bossEl.offsetWidth; bossEl.classList.add('hit');
-        FX.burst($('bossBody'), { colors: [p.color, '#fbfbf7', '#ff8fd0'], n: big ? 40 : 18, speed: big ? 420 : 260, shape: 'spark', gravity: 0 });
-        if (big && p.combo % 3 === 0) FX.stamp(`${p.combo}コンボ！`, $('q' + i), { color: p.color, size: 40, rotate: face ? (i ? -90 : 90) : 0 });
-        if (!boss.angry && boss.hp <= boss.max / 2) { boss.angry = true; say(SAY.angry); BGM.setTempo(1.15); FX.flash('#ff3b3b44'); boss.nextAtk = Math.min(boss.nextAtk, performance.now() + 2500); }
-        else say(SAY.hurt[Math.floor(Math.random() * SAY.hurt.length)]);
-        if (boss.hp <= 0) { finish(true); return; }
+        if (net) NET.send({ t: 'hit', i, dmg, score: p.score, index: p.index, combo: p.combo });
+        hitBoss(i, dmg, q.learn);
       } else {
-        p.answer = ''; $('a' + i).textContent = ''; p.combo = 0;
-        feedback(i, 'おしい！ もう一度 やってみよう（コンボ リセット）', 'bad'); sfx('bad');
-        say('ワッハッハ！ まちがえたな！');
-        panel.classList.remove('ng'); void panel.offsetWidth; panel.classList.add('ng');
+        if (net) NET.send({ t: 'miss', i });
+        miss(i);
       }
     } else if (k === '⌫') { p.answer = p.answer.slice(0, -1); $('a' + i).textContent = p.answer; sfx('key'); }
     else if (/^\d$/.test(k) && p.answer.length < 6) { p.answer += k; $('a' + i).textContent = p.answer; sfx('key'); }
+    if (net && k !== '答える') NET.send({ t: 'type', i, answer: p.answer });
+  }
+  // 通信で とどいた 相手の 正解
+  function remoteHit(m) {
+    const i = m.i, dmg = Number(m.dmg);
+    if ((i !== 0 && i !== 1) || i === me() || !(dmg > 0 && dmg <= 30)) return;
+    if (mode === 'idle' || mode === 'finished') return;
+    const p = players[i];
+    p.score = Number(m.score) || 0; p.index = Math.max(0, Number(m.index) | 0); p.combo = Number(m.combo) | 0; p.answer = '';
+    question(i);
+    hitBoss(i, dmg, '');
   }
   document.addEventListener('keydown', e => {
-    if (/^\d$/.test(e.key)) { e.preventDefault(); key(active, e.key); }
-    else if (e.key === 'Backspace') { e.preventDefault(); key(active, '⌫'); }
-    else if (e.key === 'Enter') { e.preventDefault(); key(active, '答える'); }
+    if (e.target.closest && e.target.closest('input')) return;   // なまえや ばんごうの 入力中は 答えに しない
+    const i = net ? me() : active;
+    if (/^\d$/.test(e.key)) { e.preventDefault(); key(i, e.key); }
+    else if (e.key === 'Backspace') { e.preventDefault(); key(i, '⌫'); }
+    else if (e.key === 'Enter') { e.preventDefault(); key(i, '答える'); }
   });
-  $('start').onclick = start; $('reset').onclick = reset; $('again').onclick = start;
+
+  // ---------- 通信対戦（インターネットで 2台を つなぐ） ----------
+  // へやを つくった人＝青チーム、さんかした人＝オレンジチーム。問題は 同じ たねから 作り、
+  // 正解・まちがい・バグ大王の こうげき・けっかを おくりあう
+  let netWant = null, netCode = '', netPeerName = '', netNote = '', netBad = false;
+  const TEAM = ['青チーム', 'オレンジチーム'];
+  const myNetName = () => $('netName').value.trim();
+  try { $('netName').value = localStorage.getItem('ousama-net') || ''; } catch (e) {}
+  $('netName').addEventListener('change', () => {
+    try { localStorage.setItem('ousama-net', myNetName()); } catch (e) {}
+    if (net) NET.send({ t: 'net-hello', name: myNetName() });
+  });
+  // パネルの なまえ：通信対戦では「青チーム（なまえ）」＋ 自分の パネルに「あなた」
+  function setNames(names) {
+    players.forEach((p, i) => {
+      const n = names ? String(names['p' + i] || '').slice(0, 8) : '';
+      p.name = n ? `${TEAM[i]}（${esc(n)}）` : TEAM[i];
+      $('player' + i).querySelector('.name').innerHTML = p.name + (me() === i ? '<span class="you">あなた</span>' : '');
+      $('player' + i).classList.toggle('remote', !canUse(i));
+    });
+    if (net) choose(me());
+  }
+  function setOnline(on) {
+    if (online && !on) netLeave();
+    online = on;
+    document.querySelectorAll('.seg[data-key="play"] button').forEach(x => x.setAttribute('aria-pressed', (x.dataset.v === 'online') === on));
+    $('netBox').hidden = !on;
+    syncFace(); renderNet();
+  }
+  function hostStart() {
+    act({ t: 'start', d: { seed: (Math.random() * 4294967296) | 0, opts: { ...opts }, names: { p0: myNetName(), p1: netPeerName } } });
+  }
+  function act(a) {
+    apply(a);
+    if (net) NET.send(a);
+  }
+  function apply(a) {
+    if (a.t === 'start') return start(a.d || {});
+    if (a.t === 'reset') return reset();
+    if (a.t === 'again-req') { if (net === 'host' && mode !== 'playing' && mode !== 'countdown') hostStart(); return; }
+    if (a.t === 'hit') return remoteHit(a);
+    if (a.t === 'miss' && (a.i === 0 || a.i === 1) && a.i !== me() && mode === 'playing') return miss(a.i);
+    if (a.t === 'type' && (a.i === 0 || a.i === 1) && a.i !== me() && /^\d{0,6}$/.test(a.answer)) { players[a.i].answer = a.answer; $('a' + a.i).textContent = a.answer; return; }
+    if (a.t === 'atk' && net === 'guest' && (a.i === 0 || a.i === 1) && mode === 'playing') return bossAttack(a.i);
+    if (a.t === 'end' && net === 'guest' && mode !== 'idle') {
+      // へやを つくった人の けっかに あわせる
+      if (Array.isArray(a.scores)) players.forEach((p, i) => { p.score = Number(a.scores[i]) || 0; $('score' + i).innerHTML = `${p.score}<small>ダメージ</small>`; });
+      boss.hp = Number(a.hp) || 0; bossHud();
+      return finish(!!a.defeated);
+    }
+  }
+  function netStart(role) {
+    netWant = role; netCode = ''; netPeerName = ''; netBad = false;
+    netNote = role === 'host' ? 'へやを つくって いるよ…' : 'さがして いるよ…';
+    renderNet();
+    if (role === 'host') NET.host('math');
+    else NET.join('math', $('netCode').value.replace(/\D/g, ''));
+  }
+  function netLeave() {
+    NET.leave();
+    const was = net;
+    net = null; netWant = null; netCode = ''; netPeerName = ''; netNote = ''; netBad = false;
+    if (was) { reset(); setNames(null); }
+    renderNet();
+  }
+  NET.on('code', code => { netCode = code; netNote = 'この ばんごうを 相手に 教えてね。相手が さんかするのを まってるよ…'; renderNet(); });
+  NET.on('open', () => {
+    net = netWant; netBad = false;
+    netNote = net === 'host' ? 'つながったよ！ せっていを えらんで「スタート」を おしてね' : 'つながったよ！ 相手が スタートを おすのを まってね';
+    NET.send({ t: 'net-hello', name: myNetName() });
+    reset(); setNames({ ['p' + me()]: myNetName() });
+    renderNet();
+  });
+  NET.on('data', m => {
+    if (m.t === 'net-hello') {
+      netPeerName = String(m.name || '').slice(0, 8);
+      setNames({ ['p' + me()]: myNetName(), ['p' + (1 - me())]: netPeerName });
+      return renderNet();
+    }
+    apply(m);
+  });
+  NET.on('close', () => {
+    net = null; netPeerName = '';
+    reset(); setNames(null);
+    netBad = true;
+    netNote = netWant === 'host' && netCode ? '相手との 通信が きれたよ。同じ ばんごうで もう一度 さんか できるよ' : '相手との 通信が きれたよ';
+    if (netWant === 'guest') netWant = null;
+    renderNet();
+  });
+  NET.on('error', type => {
+    netBad = true;
+    netNote = {
+      'lib': 'インターネットに つながって いないみたい',
+      'peer-unavailable': 'その ばんごうの へやが 見つからないよ。ばんごうを たしかめてね',
+      'timeout': 'つながらなかったよ。学校などの ネットワークでは つながらない ことが あるよ',
+      'unavailable-id': 'へやを つくれなかったよ。もう一度 ためしてね'
+    }[type] || 'つながらなかったよ。もう一度 ためしてね';
+    if (!net) { NET.leave(); netWant = null; netCode = ''; }
+    renderNet();
+  });
+  function renderNet() {
+    const busy = !!netWant, guest = online && net === 'guest';
+    $('netPick').hidden = busy;
+    $('netCodeShow').hidden = !(netWant === 'host' && netCode);
+    $('netCodeShow').innerHTML = `へやの ばんごう<b>${netCode}</b>`;
+    $('netLeaveBtn').hidden = !busy;
+    const st = $('netStatus');
+    st.className = 'net-status' + (net ? ' ok' : netBad ? ' bad' : '');
+    st.innerHTML = (net ? '<span class="led"></span>' : '') + esc(netNote) + (net && netPeerName ? `（相手：${esc(netPeerName)}）` : '');
+    st.hidden = !netNote;
+    // せっていと スタートは へやを つくった人だけ
+    document.querySelectorAll('.setup .option').forEach((o, k) => { if (k) o.hidden = guest; });
+    $('reset').hidden = guest;
+    $('start').hidden = guest;
+    if (mode === 'idle' || mode === 'finished') $('start').disabled = online && net !== 'host';
+  }
+  $('netHostBtn').onclick = () => netStart('host');
+  $('netJoinBtn').onclick = () => {
+    if ($('netCode').value.replace(/\D/g, '').length !== 4) { netBad = true; netNote = '4けたの ばんごうを 入れてね'; return renderNet(); }
+    netStart('guest');
+  };
+  $('netCode').addEventListener('keydown', e => { if (e.key === 'Enter') $('netJoinBtn').click(); });
+  $('netLeaveBtn').onclick = netLeave;
+
+  $('start').onclick = () => start();
+  $('reset').onclick = () => act({ t: 'reset' });
+  $('again').onclick = () => {
+    if (net !== 'guest') { $('result').hidden = true; return start(); }
+    // さんかした人は 「もう一度」の おねがいを おくる
+    NET.send({ t: 'again-req' });
+    $('again').disabled = true; $('again').textContent = '相手を まってね…';
+  };
   $('closeResult').onclick = () => { $('result').hidden = true; };
   $('soundBtn').textContent = `音：${soundOn ? 'ON' : 'OFF'}`;
   $('soundBtn').onclick = () => { soundOn = !soundOn; BGM.setEnabled(soundOn); $('soundBtn').textContent = `音：${soundOn ? 'ON' : 'OFF'}`; };
   $('fullscreen').onclick = () => { try { if (document.fullscreenElement) document.exitFullscreen(); else document.documentElement.requestFullscreen().catch(() => {}); } catch (e) {} };
   document.addEventListener('fullscreenchange', () => { $('fullscreen').textContent = document.fullscreenElement ? 'もとに もどす' : '全画面'; });
   setInterval(tick, 50);
+  // ?room=1234 つきの リンクで ひらいたら、通信対戦の さんか画面に する
+  const roomQ = (new URLSearchParams(location.search).get('room') || '').replace(/\D/g, '').slice(0, 4);
+  if (roomQ) { $('netCode').value = roomQ; setOnline(true); }
   reset();   // さいしょに ボスの HP を 出す
-  IDLE.start({ seconds: 120 });   // 2分 さわらないと ゲーム選びに もどる
+  renderNet();
+  IDLE.start({ seconds: 120, pause: () => !!netWant });   // 2分 さわらないと ゲーム選びに もどる（通信対戦ちゅうは もどらない）
 })();
 </script>
